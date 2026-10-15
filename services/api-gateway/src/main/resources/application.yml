@@ -1,0 +1,73 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              "[/**]":
+                allowed-origins: ${FRONTEND_ORIGIN:http://localhost:3000}
+                allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+                allowed-headers: "*"
+                exposed-headers: X-Correlation-Id
+                allow-credentials: true
+          # Routes follow architecture.md §7.1. Order matters: the portfolio sub-resources owned by
+          # position-service and valuation-service must be matched before the portfolio catch-all.
+          routes:
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/v1/auth/**
+            - id: position-service
+              uri: lb://position-service
+              predicates:
+                - Path=/api/v1/portfolios/*/positions/**
+            - id: valuation-service
+              uri: lb://valuation-service
+              predicates:
+                - Path=/api/v1/portfolios/*/valuation/**,/api/v1/portfolios/*/cash/**,/api/v1/portfolios/*/liabilities/**,/api/v1/portfolios/*/exposure/**,/api/v1/marketdata/**
+            - id: portfolio-service
+              uri: lb://portfolio-service
+              predicates:
+                - Path=/api/v1/portfolios/**,/api/v1/instruments/**
+            - id: trade-service
+              uri: lb://trade-service
+              predicates:
+                - Path=/api/v1/trades/**
+            - id: reconciliation-service
+              uri: lb://reconciliation-service
+              predicates:
+                - Path=/api/v1/recon/**
+            - id: notification-service
+              uri: lb://notification-service
+              predicates:
+                - Path=/api/v1/notifications/**
+            - id: analytics-service
+              uri: lb://analytics-service
+              predicates:
+                - Path=/api/v1/analytics/**
+            # Smoke-test route: proves gateway -> Eureka -> service routing before any business API exists.
+            - id: ping-portfolio
+              uri: lb://portfolio-service
+              predicates:
+                - Path=/api/v1/ping/portfolio
+              filters:
+                - SetPath=/actuator/health
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway

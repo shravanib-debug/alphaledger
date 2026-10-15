@@ -1,0 +1,25 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        native:
+          # Bundled config repo; point CONFIG_REPO at a folder (e.g. file:/config-repo) to override without a rebuild.
+          search-locations: ${CONFIG_REPO:classpath:/config-repo}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

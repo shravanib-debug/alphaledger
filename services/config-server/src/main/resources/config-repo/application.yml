@@ -1,0 +1,32 @@
+# Shared configuration served to every service by config-server.
+# Service-specific files (<application-name>.yml) in this folder override these values.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    project: AlphaLedger
+    description: Portfolio management and trade reconciliation platform
+
+logging:
+  pattern:
+    # Every log line carries the service name and the request's correlation ID.
+    level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+
+eureka:
+  instance:
+    prefer-ip-address: true
+
+alphaledger:
+  base-currency: INR

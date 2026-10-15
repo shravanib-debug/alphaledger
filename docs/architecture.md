@@ -105,7 +105,7 @@ src/main/java/com/alphaledger/<service>/
 | Concern | Technology |
 |---|---|
 | Language | Java 21 (LTS); Docker base image `eclipse-temurin:21-jre` |
-| Framework | Spring Boot 3.x |
+| Framework | Spring Boot 4.0.x (currently 4.0.8) with Spring Cloud 2025.1.x (currently 2025.1.3) |
 | Microservices | Spring Cloud (Gateway, Netflix Eureka, Config Server, OpenFeign if needed) |
 | Persistence | Spring Data JPA / Hibernate, Flyway migrations |
 | Batch | Spring Batch (reconciliation + ETL + price file ingestion) |
@@ -115,7 +115,7 @@ src/main/java/com/alphaledger/<service>/
 | Resilience | Resilience4j (retry, circuit breaker, rate limiter) |
 | Mapping/Boilerplate | MapStruct, Lombok |
 | API docs | springdoc-openapi (Swagger UI) |
-| Build | Maven (multi-module parent POM) |
+| Build | Maven 3.9 via the Maven Wrapper (`./mvnw`), multi-module parent POM |
 
 ### 3.2 Data layer
 | Concern | Technology |
@@ -784,7 +784,8 @@ alphaledger/
 | 9 | JWT stateless auth | Scales and fits gateway validation | Revocation is harder (short expiry + refresh) |
 | 10 | v1 reports Market Value, full NAV deferred to v1.5 | Keeps the MVP simple while staying honest about what is calculated | NAV needs cash, liabilities, and accrual logic added later |
 | 11 | Hybrid real prices + synthetic transactions (Indian markets: INR, ISIN, T+1) | Real NSE/AMFI prices make valuations credible and show real file ingestion; trade and custodian data is private, and recon needs deliberately injected breaks to prove the matching engine | External formats change (adapter isolation, header checks, sample-file tests); sites may throttle or block (caching, offline mode, mutual fund fallback, last real price kept and flagged stale); licensing/terms limit redistribution (download script + small filtered sample, no raw dumps); more moving parts than a mock feed |
-| 12 | Java 21 (LTS) instead of Java 17 | Current mainstream LTS supported by Spring Boot 3.x; records, pattern matching for `switch`, sequenced collections, and virtual threads suit events, state machines, and download jobs | Some older JDs list Java 17; code would need little change to target 17 |
+| 12 | Java 21 (LTS) instead of Java 17 | Current mainstream LTS supported by Spring Boot 4.0; records, pattern matching for `switch`, sequenced collections, and virtual threads suit events, state machines, and download jobs | Some older JDs list Java 17; code would need little change to target 17 |
+| 13 | Spring Boot 4.0 + Spring Cloud 2025.1 instead of Spring Boot 3.x | The Spring Boot 3.x line no longer receives open-source updates (3.5.16 was its last release); 4.0.x with Spring Cloud 2025.1.x is the newest pair with a matching Spring Cloud release (Spring Boot 4.1 has none yet) | Fewer tutorials than 3.x; Boot 4 renamed some starters (e.g. `spring-boot-starter-webmvc`, `spring-boot-starter-flyway`) and the gateway artifact (`spring-cloud-starter-gateway-server-webflux`) |
 
 ---
 

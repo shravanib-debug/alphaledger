@@ -13,7 +13,7 @@
 | # | Phase | Goal | Status |
 |---|---|---|---|
 | 0 | Planning & Domain Setup | Docs, domain understanding, repo, tooling | ✅ |
-| 1 | Foundation & Infrastructure | Monorepo, Docker infra, Gateway, Eureka, Config | ⬜ |
+| 1 | Foundation & Infrastructure | Monorepo, Docker infra, Gateway, Eureka, Config | ✅ |
 | 2 | Auth & Portfolio Core | Login/JWT/RBAC, portfolios and instruments | ⬜ |
 | 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ⬜ |
 | 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | ⬜ |
@@ -54,25 +54,25 @@
 **Goal:** A running skeleton where services can register, route, and share config.
 
 ### Project structure
-- [ ] Create parent `pom.xml` with dependency management (Spring Boot 3, Spring Cloud BOM)
-- [ ] Create module folders (`services/*`, `common/`, `frontend/`, `infra/`)
-- [ ] Create `common` module (event envelope, error model, correlation-ID filter)
+- [x] Create parent `pom.xml` with dependency management (Spring Boot 4.0, Spring Cloud 2025.1 BOM, Maven Wrapper)
+- [x] Create module folders (`services/*`, `common/`, `frontend/`, `infra/`)
+- [x] Create `common` module (event envelope, error model, correlation-ID filter)
 
 ### Infrastructure (Docker Compose)
-- [ ] PostgreSQL container with init script creating one DB per service
-- [ ] Kafka container (KRaft or with Zookeeper)
-- [ ] Kafka UI container for inspecting topics
-- [ ] MailHog container (for later email tests)
-- [ ] Verify all containers start with `docker compose up`
+- [x] PostgreSQL container with init script creating one DB per service
+- [x] Kafka container (KRaft or with Zookeeper)
+- [x] Kafka UI container for inspecting topics
+- [x] MailHog container (for later email tests)
+- [x] Verify all containers start with `docker compose up`
 
 ### Platform services
-- [ ] `discovery-server` (Eureka) running
-- [ ] `config-server` running with sample shared config
-- [ ] `api-gateway` running and registering with Eureka
-- [ ] Gateway routes defined for placeholder services
-- [ ] Add Actuator health endpoints to every service
-- [ ] Global exception handler and standard error response in `common`
-- [ ] Add Flyway to the services that need a DB
+- [x] `discovery-server` (Eureka) running
+- [x] `config-server` running with sample shared config
+- [x] `api-gateway` running and registering with Eureka
+- [x] Gateway routes defined for placeholder services
+- [x] Add Actuator health endpoints to every service
+- [x] Global exception handler and standard error response in `common`
+- [x] Add Flyway to the services that need a DB
 
 **DoD:** `docker compose up` starts infra; gateway, Eureka, and config server are healthy; a dummy request routes through the gateway.
 
@@ -467,5 +467,6 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-15 | 0 | Decided on Java 21 (LTS) instead of 17 (ADR 12): docs and conventions updated; build will use `maven.compiler.release=21` and `eclipse-temurin:21` images. JDK 21 still to install (Java 23 is present). |
 | 2026-10-15 | 0 | JDK 21 installed (Temurin 21.0.12.1); `JAVA_HOME` and PATH point to it, Java 23 kept side by side. Maven comes from the Maven Wrapper in Phase 1. Remaining Phase 0 item: domain-terms review. |
 | 2026-10-15 | 0 | Phase 0 complete (DoD met: repo with docs on GitHub; `java -version` 21, `docker --version` 29, `node -v` 24). |
+| 2026-10-15 | 1 | Phase 1 complete. Spring Boot 4.0.8 + Spring Cloud 2025.1.3 (ADR 13), Maven Wrapper 3.9.16, 13 modules (`common`, 3 platform services, 8 business-service skeletons with Actuator, Flyway baseline, Eureka and config clients). `infra/docker-compose.yml`: Postgres 16 (8 DBs), Kafka 4.2 KRaft, Kafka UI, MailHog, Eureka, config server, gateway, portfolio-service. `./mvnw verify`: 34 tests green. `scripts/smoke-test.sh`: 8/8 checks pass (health, shared config, Eureka registration, gateway routing, correlation ID). |
 | | | |
 | | | |
