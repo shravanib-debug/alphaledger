@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Market data samples keep the exact bytes of the source files (AMFI NAVAll.txt uses CRLF),
+# so parser tests and checksums see what the real sources publish.
+reference-data/sample/** -text
+**/src/test/resources/marketdata/** -text
+
+*.jar binary
+*.png binary
+*.zip binary
