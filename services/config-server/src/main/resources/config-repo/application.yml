@@ -30,3 +30,9 @@ eureka:
 
 alphaledger:
   base-currency: INR
+  security:
+    jwt:
+      # The signing secret is NOT here: each service reads it from the JWT_SECRET environment variable.
+      issuer: alphaledger-auth
+      access-token-ttl: 15m
+      refresh-token-ttl: 7d

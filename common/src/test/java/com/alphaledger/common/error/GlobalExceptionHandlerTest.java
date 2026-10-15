@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 
@@ -18,6 +19,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.alphaledger.common.web.CorrelationId;
@@ -73,6 +75,27 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void mapsInvalidRequestParametersTo400() throws Exception {
+        mockMvc.perform(get("/page").param("size", "500"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("size: must be less than or equal to 100"));
+        mockMvc.perform(get("/page").param("size", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("size: invalid value 'abc'"));
+    }
+
+    @Test
+    void mapsUnknownEndpointAndWrongMethod() throws Exception {
+        mockMvc.perform(get("/does-not-exist"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("NOT_FOUND"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/rule"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.error").value("METHOD_NOT_ALLOWED"));
+    }
+
+    @Test
     void hidesDetailsOfUnexpectedErrors() throws Exception {
         mockMvc.perform(get("/boom"))
                 .andExpect(status().isInternalServerError())
@@ -103,6 +126,11 @@ class GlobalExceptionHandlerTest {
 
         @PostMapping("/trades")
         String create(@Valid @RequestBody CreateTradeRequest request) {
+            return "ok";
+        }
+
+        @GetMapping("/page")
+        String page(@RequestParam(defaultValue = "20") @Max(100) int size) {
             return "ok";
         }
     }

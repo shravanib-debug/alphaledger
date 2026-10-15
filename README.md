@@ -2,7 +2,7 @@
 
 Portfolio management and trade reconciliation platform for Indian markets: an event-driven Java/Spring Boot microservices system where trades flow in, positions and portfolio market value update automatically, and settled trades are reconciled against a custodian file, with breaks managed in a React dashboard.
 
-**Status:** Phase 1 (foundation and infrastructure) complete. See the [roadmap](docs/roadmap.md).
+**Status:** Phase 2 (authentication, portfolios and instruments) complete. See the [roadmap](docs/roadmap.md).
 
 ## Running locally
 
@@ -22,8 +22,29 @@ docker compose -f infra/docker-compose.yml down         # stop (add -v to also d
 | http://localhost:8888/portfolio-service/default | Config server (shared config as seen by a service) |
 | http://localhost:8090 | Kafka UI |
 | http://localhost:8025 | MailHog (captured emails) |
+| http://localhost:8081/swagger-ui.html | auth-service API docs |
+| http://localhost:8082/swagger-ui.html | portfolio-service API docs |
 
 Local credentials and ports can be overridden by copying `infra/.env.example` to `infra/.env`.
+
+### Demo users
+
+All four share the local demo password `Demo@AlphaLedger2026` (set by `DEMO_USER_PASSWORD`).
+
+| Email | Role | Can |
+|---|---|---|
+| `anita.admin@alphaledger.test` | ADMIN | Everything, including user management |
+| `priya.pm@alphaledger.test` | PM | Manage her portfolios (the 3 demo portfolios), add instruments |
+| `rohan.ops@alphaledger.test` | OPS_ANALYST | Read portfolios and instruments (reconciliation from Phase 5) |
+| `vikram.auditor@alphaledger.test` | AUDITOR | Read only |
+
+```bash
+curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"priya.pm@alphaledger.test","password":"Demo@AlphaLedger2026"}'
+# then: curl -H "Authorization: Bearer <accessToken>" localhost:8080/api/v1/portfolios
+```
+
+Or import `docs/postman/AlphaLedger.postman_collection.json` into Postman and run a "Login as ..." request first.
 
 ## Repository layout
 

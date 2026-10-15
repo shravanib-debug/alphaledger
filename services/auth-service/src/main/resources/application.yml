@@ -16,6 +16,19 @@ spring:
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
 
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+    additional-public-paths:
+      - /api/v1/auth/login
+      - /api/v1/auth/refresh
+      - /api/v1/auth/logout
+  seed:
+    demo-users:
+      enabled: ${SEED_DEMO_USERS:false}
+      password: ${DEMO_USER_PASSWORD:}
+
 eureka:
   client:
     service-url:

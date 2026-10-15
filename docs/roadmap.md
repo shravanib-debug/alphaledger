@@ -14,7 +14,7 @@
 |---|---|---|---|
 | 0 | Planning & Domain Setup | Docs, domain understanding, repo, tooling | ✅ |
 | 1 | Foundation & Infrastructure | Monorepo, Docker infra, Gateway, Eureka, Config | ✅ |
-| 2 | Auth & Portfolio Core | Login/JWT/RBAC, portfolios and instruments | ⬜ |
+| 2 | Auth & Portfolio Core | Login/JWT/RBAC, portfolios and instruments | ✅ |
 | 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ⬜ |
 | 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | ⬜ |
 | 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ⬜ |
@@ -83,27 +83,27 @@
 **Goal:** Secure the platform and create the master data everything else depends on.
 
 ### Auth Service
-- [ ] User and role entities, Flyway migration
-- [ ] BCrypt password hashing
-- [ ] `POST /auth/login` issuing JWT access + refresh tokens
-- [ ] `POST /auth/refresh`
-- [ ] Admin-only user creation endpoint
-- [ ] Seed default users (Admin, PM, Ops Analyst, Auditor)
-- [ ] Unit tests for token generation and login logic
+- [x] User and role entities, Flyway migration
+- [x] BCrypt password hashing
+- [x] `POST /auth/login` issuing JWT access + refresh tokens
+- [x] `POST /auth/refresh`
+- [x] Admin-only user creation endpoint
+- [x] Seed default users (Admin, PM, Ops Analyst, Auditor)
+- [x] Unit tests for token generation and login logic
 
 ### Gateway security
-- [ ] JWT validation filter at the gateway
-- [ ] Public routes (`/auth/**`) vs protected routes
-- [ ] Forward user id and roles as headers
-- [ ] CORS configured for the frontend origin
+- [x] JWT validation filter at the gateway
+- [x] Public routes (`/auth/**`) vs protected routes
+- [x] Forward user id and roles as headers
+- [x] CORS configured for the frontend origin
 
 ### Portfolio Service
-- [ ] Portfolio, fund, instrument entities and migrations (instrument keyed by `isin UNIQUE NOT NULL`, symbol secondary, plus `exchange`, `instrument_type`, `asset_class_proxy`, `amfi_scheme_code`, `is_synthetic`; currency default INR)
-- [ ] CRUD endpoints with validation
-- [ ] Role-based access (`@PreAuthorize`)
-- [ ] Seed 3 portfolios (Indian-context names, base currency INR) and the demo instruments keyed by ISIN (26 real + 3 synthetic, `prd.md` §10; initial seed, reseeded from the verified instrument master with stable `instrument_id`s in Phase 4A)
-- [ ] OpenAPI/Swagger enabled
-- [ ] Unit tests (service layer) and API tests (MockMvc)
+- [x] Portfolio, fund, instrument entities and migrations (instrument keyed by `isin UNIQUE NOT NULL`, symbol secondary, plus `exchange`, `instrument_type`, `asset_class_proxy`, `amfi_scheme_code`, `is_synthetic`; currency default INR)
+- [x] CRUD endpoints with validation
+- [x] Role-based access (`@PreAuthorize`)
+- [x] Seed 3 portfolios (Indian-context names, base currency INR) and the demo instruments keyed by ISIN (26 real + 3 synthetic, `prd.md` §10; initial seed, reseeded from the verified instrument master with stable `instrument_id`s in Phase 4A)
+- [x] OpenAPI/Swagger enabled
+- [x] Unit tests (service layer) and API tests (MockMvc)
 
 **DoD:** Log in as each role via Postman; protected endpoints reject missing/invalid tokens; portfolios and instruments are retrievable through the gateway.
 
@@ -468,5 +468,6 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-15 | 0 | JDK 21 installed (Temurin 21.0.12.1); `JAVA_HOME` and PATH point to it, Java 23 kept side by side. Maven comes from the Maven Wrapper in Phase 1. Remaining Phase 0 item: domain-terms review. |
 | 2026-10-15 | 0 | Phase 0 complete (DoD met: repo with docs on GitHub; `java -version` 21, `docker --version` 29, `node -v` 24). |
 | 2026-10-15 | 1 | Phase 1 complete. Spring Boot 4.0.8 + Spring Cloud 2025.1.3 (ADR 13), Maven Wrapper 3.9.16, 13 modules (`common`, 3 platform services, 8 business-service skeletons with Actuator, Flyway baseline, Eureka and config clients). `infra/docker-compose.yml`: Postgres 16 (8 DBs), Kafka 4.2 KRaft, Kafka UI, MailHog, Eureka, config server, gateway, portfolio-service. `./mvnw verify`: 34 tests green. `scripts/smoke-test.sh`: 8/8 checks pass (health, shared config, Eureka registration, gateway routing, correlation ID). |
+| 2026-10-15 | 2 | Phase 2 complete. auth-service: users/roles (`app_user`, `role`, `refresh_token`), BCrypt, HS256 access tokens (15 min) + rotating opaque refresh tokens (7 days, reuse revokes all), login/refresh/logout/me, Admin-only user management, 4 demo users (IDs 1-4). Gateway: JWT validation, spoof-proof `X-User-*` headers, JSON 401/403. portfolio-service: portfolios, funds, instruments (ISIN check-digit validation), PM-owns-portfolio rules, `@PreAuthorize`, instrument master `reference-data/instruments/instrument_master.csv` loaded with stable IDs 1-29 (pulled forward from Phase 4A), 3 demo portfolios with 7 funds. OpenAPI + Swagger UI on auth and portfolio. Postman collection in `docs/postman/`. `./mvnw verify`: 91 tests (incl. Testcontainers ITs) green; smoke test 22/22. ADR 14 (HS256 shared secret). |
 | | | |
 | | | |

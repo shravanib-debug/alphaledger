@@ -61,6 +61,11 @@ spring:
               filters:
                 - SetPath=/actuator/health
 
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+
 eureka:
   client:
     service-url:

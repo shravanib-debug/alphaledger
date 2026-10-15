@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Phase 1 smoke test: checks that the local stack is up and that a request routes through the gateway.
+# Smoke test for the local stack: platform health and routing (Phase 1), then login, tokens and role checks
+# through the gateway (Phase 2).
 # Usage (after `docker compose -f infra/docker-compose.yml up -d --build`):  bash scripts/smoke-test.sh
 set -euo pipefail
 
@@ -41,6 +42,64 @@ if [[ "$correlation" == "smoke-test-1" ]]; then
 else
     echo "FAIL  correlation ID propagated (got '$correlation')"
     failures=$((failures + 1))
+fi
+
+# ---------- Phase 2: authentication and authorization through the gateway ----------
+DEMO_PASSWORD=${DEMO_USER_PASSWORD:-Demo@AlphaLedger2026}
+
+check "auth-service registered"               "$EUREKA/eureka/apps/AUTH-SERVICE"    '"AUTH-SERVICE"'
+
+# Prints the access token for a demo user (empty if login fails).
+login() {
+    curl -sS -X POST "$GATEWAY/api/v1/auth/login" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$1\",\"password\":\"$DEMO_PASSWORD\"}" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p'
+}
+
+# expect_status <name> <expected-code> <curl args...>
+expect_status() {
+    local name=$1 expected=$2; shift 2
+    local code
+    code=$(curl -sS -o /dev/null -w '%{http_code}' "$@")
+    if [[ "$code" == "$expected" ]]; then
+        echo "PASS  $name"
+    else
+        echo "FAIL  $name (expected $expected, got $code)"
+        failures=$((failures + 1))
+    fi
+}
+
+# After a restart the gateway needs up to ~60 s to see auth-service in its Eureka cache; wait for a first login.
+deadline=$((SECONDS + TIMEOUT_SECONDS))
+until [[ -n "$(login anita.admin@alphaledger.test)" ]] || (( SECONDS >= deadline )); do sleep 5; done
+
+for user in anita.admin priya.pm rohan.ops vikram.auditor; do
+    token=$(login "$user@alphaledger.test")
+    if [[ -n "$token" ]]; then echo "PASS  login as $user"; else echo "FAIL  login as $user"; failures=$((failures + 1)); fi
+done
+PM_TOKEN=$(login priya.pm@alphaledger.test)
+AUDITOR_TOKEN=$(login vikram.auditor@alphaledger.test)
+
+expect_status "wrong password rejected (401)"      401 -X POST "$GATEWAY/api/v1/auth/login" \
+    -H 'Content-Type: application/json' -d '{"email":"priya.pm@alphaledger.test","password":"wrong"}'
+expect_status "no token rejected (401)"            401 "$GATEWAY/api/v1/portfolios"
+expect_status "invalid token rejected (401)"       401 -H 'Authorization: Bearer not.a.jwt' "$GATEWAY/api/v1/portfolios"
+expect_status "auditor reads portfolios (200)"     200 -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/portfolios"
+expect_status "auditor reads instruments (200)"    200 -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/instruments"
+expect_status "auditor cannot create (403)"        403 -X POST -H "Authorization: Bearer $AUDITOR_TOKEN" \
+    -H 'Content-Type: application/json' -d '{"name":"Not allowed"}' "$GATEWAY/api/v1/portfolios"
+expect_status "spoofed X-User-Roles ignored (403)" 403 -X POST -H "Authorization: Bearer $AUDITOR_TOKEN" \
+    -H 'X-User-Roles: ADMIN' -H 'Content-Type: application/json' -d '{"name":"Not allowed"}' "$GATEWAY/api/v1/portfolios"
+portfolios=$(curl -fsS -H "Authorization: Bearer $PM_TOKEN" "$GATEWAY/api/v1/portfolios")
+if [[ "$portfolios" == *"AlphaLedger India Growth Equity Fund"* ]]; then
+    echo "PASS  demo portfolios served through the gateway"
+else
+    echo "FAIL  demo portfolios served through the gateway"; failures=$((failures + 1))
+fi
+instruments=$(curl -fsS -H "Authorization: Bearer $PM_TOKEN" "$GATEWAY/api/v1/instruments?isin=INE041025011")
+if [[ "$instruments" == *'"symbol":"EMBASSY"'* ]]; then
+    echo "PASS  instrument lookup by ISIN"
+else
+    echo "FAIL  instrument lookup by ISIN"; failures=$((failures + 1))
 fi
 
 if (( failures > 0 )); then

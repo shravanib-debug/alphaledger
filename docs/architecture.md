@@ -110,7 +110,7 @@ src/main/java/com/alphaledger/<service>/
 | Persistence | Spring Data JPA / Hibernate, Flyway migrations |
 | Batch | Spring Batch (reconciliation + ETL + price file ingestion) |
 | HTTP client (market data) | Spring `RestClient` for file downloads and mfapi.in, wrapped in Resilience4j retry/rate limiter; disabled in tests and CI |
-| Security | Spring Security, JWT (jjwt), BCrypt |
+| Security | Spring Security 7 (OAuth2 resource server), JWT signed and verified with Nimbus JOSE (HS256), BCrypt |
 | Messaging | Apache Kafka with Spring Kafka |
 | Resilience | Resilience4j (retry, circuit breaker, rate limiter) |
 | Mapping/Boilerplate | MapStruct, Lombok |
@@ -486,14 +486,16 @@ erDiagram
 
 ### 6.1 `auth_db`
 ```
-user(id, email UNIQUE, password_hash, full_name, role, status, created_at)
-refresh_token(id, user_id, token_hash, expires_at, revoked)
+role(code PK, description)                                             -- ADMIN, PM, OPS_ANALYST, AUDITOR
+app_user(id, email UNIQUE, password_hash, full_name, role FK, status, created_at)   -- "user" is reserved in PostgreSQL;
+                                                                       -- IDs < 1000 reserved for seeded demo users 1-4
+refresh_token(id, user_id FK, token_hash UNIQUE, expires_at, revoked, created_at)   -- SHA-256 of an opaque token
 ```
 
 ### 6.2 `portfolio_db`
 ```
-portfolio(id, name, manager_id, base_currency DEFAULT 'INR', status, created_at)
-fund(id, portfolio_id FK, name, asset_class)
+portfolio(id, name UNIQUE, manager_id, base_currency DEFAULT 'INR', status, created_at, updated_at)   -- IDs < 1000 reserved for demo data
+fund(id, portfolio_id FK, name, asset_class, UNIQUE(portfolio_id, name))
 instrument(id, isin UNIQUE NOT NULL, symbol NULL, exchange,              -- id seeded from instrument_master.csv instrument_id; ISIN is the primary business key; symbol is secondary
            name, asset_class, asset_class_proxy, instrument_type,      -- instrument_type: EQUITY, REIT, INVIT, GSEC, BOND, MUTUAL_FUND, PRIVATE
            currency DEFAULT 'INR', amfi_scheme_code NULL, is_synthetic DEFAULT false, status)
@@ -586,9 +588,13 @@ dq_check_result(id, check_name, run_at, status, details)
 | Service | Endpoint | Purpose |
 |---|---|---|
 | Auth | `POST /api/v1/auth/login` | Login, returns JWT + refresh token |
-| Auth | `POST /api/v1/auth/refresh` | Refresh access token |
-| Portfolio | `GET/POST /api/v1/portfolios` | List / create portfolios |
-| Portfolio | `GET/POST /api/v1/instruments` | List / create instruments |
+| Auth | `POST /api/v1/auth/refresh` | Rotate refresh token, new access token |
+| Auth | `POST /api/v1/auth/logout` | Revoke a refresh token |
+| Auth | `GET /api/v1/auth/me` | Current user |
+| Auth | `GET/POST /api/v1/auth/users`, `GET /api/v1/auth/users/{id}` | List / create / get users (Admin) |
+| Portfolio | `GET/POST /api/v1/portfolios`, `GET/PUT /api/v1/portfolios/{id}` | List / create / get / update portfolios |
+| Portfolio | `POST /api/v1/portfolios/{id}/archive`, `POST /api/v1/portfolios/{id}/funds` | Archive a portfolio / add a fund |
+| Portfolio | `GET/POST /api/v1/instruments`, `GET/PUT /api/v1/instruments/{id}` | Search (`assetClass`, `instrumentType`, `isin`, `q`) / create / get / update instruments |
 | Trade | `POST /api/v1/trades` | Create trade |
 | Trade | `GET /api/v1/trades?portfolioId=&status=&from=&to=` | Trade blotter |
 | Trade | `POST /api/v1/trades/{id}/cancel` | Cancel trade |
@@ -630,10 +636,10 @@ dq_check_result(id, check_name, run_at, status, details)
 
 | Layer | Control |
 |---|---|
-| Authentication | Email + password → JWT (15 min access, 7 day refresh) |
-| Gateway | Validates JWT signature and expiry; rejects unauthenticated calls except `/auth/**` |
-| Authorization | Role claims in JWT; `@PreAuthorize` on service endpoints (defense in depth) |
-| Propagation | Gateway forwards user id and roles as trusted headers; internal services are not publicly exposed |
+| Authentication | Email + password → HS256 JWT access token (15 min) + opaque refresh token (7 days, stored as SHA-256, rotated on every use; reuse of a used token revokes all of the user's tokens) |
+| Gateway | Validates JWT signature, expiry and issuer; rejects unauthenticated calls except login/refresh/logout, health and the smoke-test ping |
+| Authorization | Each service validates the JWT again (shared HS256 key) and enforces roles with `@PreAuthorize`; ownership rules (a PM changes only own portfolios) in the service layer |
+| Propagation | Gateway strips client-sent `X-User-*` headers and forwards `X-User-Id`, `X-User-Email`, `X-User-Roles` from the verified token (for logging); services authorize from the token, never from these headers |
 | Secrets | Environment variables / Config Server (encrypted); never committed |
 | Input validation | Bean Validation (`@Valid`) on all DTOs |
 | Data protection | BCrypt for passwords; parameterized queries via JPA |
@@ -786,6 +792,7 @@ alphaledger/
 | 11 | Hybrid real prices + synthetic transactions (Indian markets: INR, ISIN, T+1) | Real NSE/AMFI prices make valuations credible and show real file ingestion; trade and custodian data is private, and recon needs deliberately injected breaks to prove the matching engine | External formats change (adapter isolation, header checks, sample-file tests); sites may throttle or block (caching, offline mode, mutual fund fallback, last real price kept and flagged stale); licensing/terms limit redistribution (download script + small filtered sample, no raw dumps); more moving parts than a mock feed |
 | 12 | Java 21 (LTS) instead of Java 17 | Current mainstream LTS supported by Spring Boot 4.0; records, pattern matching for `switch`, sequenced collections, and virtual threads suit events, state machines, and download jobs | Some older JDs list Java 17; code would need little change to target 17 |
 | 13 | Spring Boot 4.0 + Spring Cloud 2025.1 instead of Spring Boot 3.x | The Spring Boot 3.x line no longer receives open-source updates (3.5.16 was its last release); 4.0.x with Spring Cloud 2025.1.x is the newest pair with a matching Spring Cloud release (Spring Boot 4.1 has none yet) | Fewer tutorials than 3.x; Boot 4 renamed some starters (e.g. `spring-boot-starter-webmvc`, `spring-boot-starter-flyway`) and the gateway artifact (`spring-cloud-starter-gateway-server-webflux`) |
+| 14 | HS256 shared-secret JWTs, validated at the gateway and again in every service | Simple to run locally (one secret from `JWT_SECRET`, no key server); defense in depth means a service reached directly still rejects forged or expired tokens | Every service holds the signing secret, so any compromised service could mint tokens; the upgrade path is RS256 with auth-service publishing a JWK set |
 
 ---
 

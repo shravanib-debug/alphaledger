@@ -38,6 +38,9 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-cloud.version>2025.1.3</spring-cloud.version>
+        <springdoc.version>3.0.3</springdoc.version>
+        <!-- Tests run in UTC like the services (see each *Application.main); avoids host-specific zone names. -->
+        <argLine>-Duser.timezone=UTC</argLine>
     </properties>
 
     <dependencyManagement>
@@ -54,6 +57,21 @@
                 <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- *Test classes run in `test` (surefire); *IT classes (Testcontainers) run in `verify` (failsafe). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>

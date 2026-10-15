@@ -1,0 +1,188 @@
+{
+  "info": {
+    "name": "AlphaLedger",
+    "description": "Calls through the API gateway. Run one of the Login requests first: it stores the access token in {{accessToken}}, which every other request sends as a Bearer token. Demo users and password are in infra/.env.example.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "demoPassword", "value": "Demo@AlphaLedger2026" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "event": [],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login as Admin (Anita)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.collectionVariables.set('accessToken', body.accessToken);",
+            "pm.collectionVariables.set('refreshToken', body.refreshToken);"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"anita.admin@alphaledger.test\",\n  \"password\": \"{{demoPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Login as PM (Priya)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.collectionVariables.set('accessToken', body.accessToken);",
+            "pm.collectionVariables.set('refreshToken', body.refreshToken);"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"priya.pm@alphaledger.test\",\n  \"password\": \"{{demoPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Login as Ops Analyst (Rohan)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.collectionVariables.set('accessToken', body.accessToken);",
+            "pm.collectionVariables.set('refreshToken', body.refreshToken);"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"rohan.ops@alphaledger.test\",\n  \"password\": \"{{demoPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Login as Auditor (Vikram)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.collectionVariables.set('accessToken', body.accessToken);",
+            "pm.collectionVariables.set('refreshToken', body.refreshToken);"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"vikram.auditor@alphaledger.test\",\n  \"password\": \"{{demoPassword}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Refresh tokens",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.collectionVariables.set('accessToken', body.accessToken);",
+            "pm.collectionVariables.set('refreshToken', body.refreshToken);"
+          ] } }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/refresh"
+          }
+        },
+        {
+          "name": "Who am I",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/auth/me" }
+        },
+        {
+          "name": "List users (Admin only)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/auth/users" }
+        },
+        {
+          "name": "Create user (Admin only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"new.analyst@alphaledger.test\",\n  \"password\": \"Choose-A-Long-Password-1\",\n  \"fullName\": \"New Analyst\",\n  \"role\": \"OPS_ANALYST\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/users"
+          }
+        },
+        {
+          "name": "Logout (revoke refresh token)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          }
+        },
+        {
+          "name": "No token (expect 401)",
+          "request": { "auth": { "type": "noauth" }, "method": "GET", "url": "{{baseUrl}}/api/v1/portfolios" }
+        }
+      ]
+    },
+    {
+      "name": "Portfolios",
+      "item": [
+        {
+          "name": "List portfolios",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/portfolios?page=0&size=20", "host": ["{{baseUrl}}"], "path": ["api", "v1", "portfolios"], "query": [{ "key": "page", "value": "0" }, { "key": "size", "value": "20" }] } }
+        },
+        {
+          "name": "Get portfolio 1",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/portfolios/1" }
+        },
+        {
+          "name": "Create portfolio (Admin or PM)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"AlphaLedger Postman Test Fund\"\n}" },
+            "url": "{{baseUrl}}/api/v1/portfolios"
+          }
+        },
+        {
+          "name": "Add fund to portfolio 2 (Admin or managing PM)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Infrastructure Debt Sleeve\",\n  \"assetClass\": \"REAL_ESTATE\"\n}" },
+            "url": "{{baseUrl}}/api/v1/portfolios/2/funds"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Instruments",
+      "item": [
+        {
+          "name": "List instruments",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/instruments" }
+        },
+        {
+          "name": "Search by asset class (REAL_ESTATE)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/instruments?assetClass=REAL_ESTATE", "host": ["{{baseUrl}}"], "path": ["api", "v1", "instruments"], "query": [{ "key": "assetClass", "value": "REAL_ESTATE" }] } }
+        },
+        {
+          "name": "Find by ISIN (Embassy REIT)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/v1/instruments?isin=INE041025011", "host": ["{{baseUrl}}"], "path": ["api", "v1", "instruments"], "query": [{ "key": "isin", "value": "INE041025011" }] } }
+        },
+        {
+          "name": "Get instrument 18 (Reliance)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/instruments/18" }
+        }
+      ]
+    }
+  ]
+}

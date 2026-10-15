@@ -15,6 +15,20 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
+    properties:
+      hibernate:
+        default_batch_fetch_size: 50   # loads funds for a page of portfolios in one query
+
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+  reference-data:
+    instruments:
+      enabled: true
+  seed:
+    demo-data:
+      enabled: ${SEED_DEMO_DATA:false}
 
 eureka:
   client:

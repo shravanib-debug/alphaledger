@@ -18,7 +18,8 @@ import reactor.core.publisher.Mono;
 
 @SpringBootTest(properties = {
         "eureka.client.enabled=false",
-        "spring.cloud.config.enabled=false"
+        "spring.cloud.config.enabled=false",
+        "alphaledger.security.jwt.secret=" + TestTokens.SECRET
 })
 class GatewayRoutesTest {
 

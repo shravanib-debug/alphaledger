@@ -1,4 +1,4 @@
-# AlphaLedger local stack (Phase 1: infrastructure + platform services + one smoke-test service).
+# AlphaLedger local stack: infrastructure, platform services, auth-service and portfolio-service.
 # Run from the repo root:  docker compose -f infra/docker-compose.yml up -d --build
 # Business services are added here as their phases land; Compose profiles arrive in Phase 9.
 
@@ -14,6 +14,8 @@ x-java-service: &java-service
     EUREKA_URL: http://discovery-server:8080/eureka
     CONFIG_SERVER_URL: http://config-server:8080
     JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
+    # Local-development signing key only. Override in infra/.env for anything shared (see infra/.env.example).
+    JWT_SECRET: ${JWT_SECRET:-rI0r1utFpB/WAXCpUz7oTxyCYdJu5Y++uXHT0UwueEbDiXLZIke/+rDAKgn6U8bq}
   healthcheck: &java-health
     test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
     interval: 10s
@@ -132,7 +134,31 @@ services:
         condition: service_healthy
 
   # ---------- Business services ----------
-  # Phase 1 runs portfolio-service only, as the target of the gateway smoke test.
+  auth-service:
+    <<: *java-service
+    build:
+      context: ..
+      dockerfile: infra/docker/service.Dockerfile
+      args:
+        MODULE: auth-service
+    environment:
+      <<: *java-env
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_USER: ${POSTGRES_USER:-alphaledger}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-alphaledger}
+      SEED_DEMO_USERS: "true"
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-Demo@AlphaLedger2026}
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+
   portfolio-service:
     <<: *java-service
     build:
@@ -146,6 +172,7 @@ services:
       DB_HOST: postgres
       DB_USER: ${POSTGRES_USER:-alphaledger}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-alphaledger}
+      SEED_DEMO_DATA: "true"
     ports:
       - "8082:8080"
     depends_on:

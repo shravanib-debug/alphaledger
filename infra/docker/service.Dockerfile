@@ -8,6 +8,7 @@ COPY .mvn .mvn
 COPY mvnw pom.xml ./
 COPY common common
 COPY services services
+COPY reference-data reference-data
 ARG MODULE
 RUN --mount=type=cache,target=/root/.m2 \
     sh ./mvnw -B -q -pl services/${MODULE} -am package -DskipTests \
