@@ -38,7 +38,7 @@
 - [x] Read and finalize `prd.md`
 - [x] Read and finalize `architecture.md`
 - [ ] Learn core domain terms (trade, position, NAV, settlement, custodian, reconciliation, break)
-- [ ] Install tooling: JDK 17, Maven, Node 18+, Docker Desktop, Git, IntelliJ/VS Code, Postman
+- [ ] Install tooling: JDK 21, Maven (or the Maven Wrapper), Node 18+, Docker Desktop, Git, IntelliJ/VS Code, Postman
 - [x] Create GitHub repository (`alphaledger`)
 - [x] Set up branching strategy (`main`, `develop`, `feature/*`)
 - [x] Add `.gitignore`, `.editorconfig`, LICENSE
@@ -464,5 +464,6 @@ Pick based on remaining time and the JD's "add-on" skills.
 | Date | Phase | Notes |
 |---|---|---|
 | 2026-10-15 | 0 | Repo initialised with docs, `.gitignore`, `.gitattributes`, `.editorconfig`, MIT LICENSE, README, `docs/conventions.md`; `main` and `develop` pushed. This file is the single tracker. Tooling: Java 23, Node 24, Docker 29, Git 2.49 present; Maven not installed (plan: Maven Wrapper `mvnw` in Phase 1, build targets Java 17 via `--release 17`). Domain-terms review still open. |
+| 2026-10-15 | 0 | Decided on Java 21 (LTS) instead of 17 (ADR 12): docs and conventions updated; build will use `maven.compiler.release=21` and `eclipse-temurin:21` images. JDK 21 still to install (Java 23 is present). |
 | | | |
 | | | |

@@ -404,7 +404,7 @@ Synthetic identifiers use the `ZZSYN` prefix in the ISIN column. `ZZ` is not ass
 
 ### Dependencies
 - Docker and Docker Compose for local infrastructure (Kafka, PostgreSQL).
-- Java 17+, Node 18+, Maven.
+- Java 21 (LTS), Node 18+, Maven (via the Maven Wrapper).
 - Public market data sites (NSE archives, AMFI, optionally mfapi.in), needed **only** to refresh data with the download script. The demo, tests, and CI use the committed sample and never need network access.
 
 ### Risks and mitigations

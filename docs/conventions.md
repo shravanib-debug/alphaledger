@@ -31,7 +31,7 @@
 | Tests | `<ClassUnderTest>Test` (unit), `<ClassUnderTest>IT` (integration, Testcontainers) | `PositionCalculatorTest`, `TradeOutboxIT` |
 | Money and prices | `BigDecimal`, never `double`; amounts in INR | |
 | Dates | `LocalDate` for trade/settle/data dates; `Instant` (UTC) for timestamps | |
-| Language level | Java 17 (`maven.compiler.release=17`), even when built on a newer JDK | |
+| Language level | Java 21 (`maven.compiler.release=21`), even when built on a newer JDK | |
 
 ## 3. Kafka topics and events
 

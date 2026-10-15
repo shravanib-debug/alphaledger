@@ -104,7 +104,7 @@ src/main/java/com/alphaledger/<service>/
 ### 3.1 Backend
 | Concern | Technology |
 |---|---|
-| Language | Java 17 (LTS) |
+| Language | Java 21 (LTS); Docker base image `eclipse-temurin:21-jre` |
 | Framework | Spring Boot 3.x |
 | Microservices | Spring Cloud (Gateway, Netflix Eureka, Config Server, OpenFeign if needed) |
 | Persistence | Spring Data JPA / Hibernate, Flyway migrations |
@@ -784,6 +784,7 @@ alphaledger/
 | 9 | JWT stateless auth | Scales and fits gateway validation | Revocation is harder (short expiry + refresh) |
 | 10 | v1 reports Market Value, full NAV deferred to v1.5 | Keeps the MVP simple while staying honest about what is calculated | NAV needs cash, liabilities, and accrual logic added later |
 | 11 | Hybrid real prices + synthetic transactions (Indian markets: INR, ISIN, T+1) | Real NSE/AMFI prices make valuations credible and show real file ingestion; trade and custodian data is private, and recon needs deliberately injected breaks to prove the matching engine | External formats change (adapter isolation, header checks, sample-file tests); sites may throttle or block (caching, offline mode, mutual fund fallback, last real price kept and flagged stale); licensing/terms limit redistribution (download script + small filtered sample, no raw dumps); more moving parts than a mock feed |
+| 12 | Java 21 (LTS) instead of Java 17 | Current mainstream LTS supported by Spring Boot 3.x; records, pattern matching for `switch`, sequenced collections, and virtual threads suit events, state machines, and download jobs | Some older JDs list Java 17; code would need little change to target 17 |
 
 ---
 
