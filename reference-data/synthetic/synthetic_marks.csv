@@ -1,0 +1,13 @@
+isin,valuation_date,price,fair_value_level,note
+ZZSYN0000001,2025-12-31,1250.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000001,2026-03-31,1310.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000001,2026-06-30,1295.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000001,2026-09-30,1360.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000002,2025-12-31,480.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000002,2026-03-31,505.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000002,2026-06-30,522.50,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000002,2026-09-30,540.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000003,2025-12-31,2150.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000003,2026-03-31,2085.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000003,2026-06-30,2120.00,L3,SYNTHETIC quarterly mark - invented for the demo
+ZZSYN0000003,2026-09-30,2210.00,L3,SYNTHETIC quarterly mark - invented for the demo

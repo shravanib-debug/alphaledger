@@ -99,16 +99,6 @@
     </dependencies>
 
     <build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-            </resource>
-            <!-- The committed instrument master (stable instrument_id per ISIN) is packaged into the jar. -->
-            <resource>
-                <directory>${project.basedir}/../../reference-data/instruments</directory>
-                <targetPath>reference-data/instruments</targetPath>
-            </resource>
-        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

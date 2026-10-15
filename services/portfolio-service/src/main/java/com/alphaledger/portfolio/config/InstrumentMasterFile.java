@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.alphaledger.common.csv.CsvLine;
 import com.alphaledger.portfolio.domain.AssetClass;
 import com.alphaledger.portfolio.domain.AssetClassProxy;
 import com.alphaledger.portfolio.domain.InstrumentType;
@@ -75,33 +76,9 @@ public final class InstrumentMasterFile {
         }
     }
 
-    /** Minimal RFC 4180 split: commas inside double quotes are kept; "" is an escaped quote. */
+    /** Delegates to the shared splitter so every reader of the master parses quotes the same way. */
     static List<String> splitCsv(String line) {
-        List<String> fields = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        boolean quoted = false;
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (quoted) {
-                if (c == '"' && i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                    current.append('"');
-                    i++;
-                } else if (c == '"') {
-                    quoted = false;
-                } else {
-                    current.append(c);
-                }
-            } else if (c == '"') {
-                quoted = true;
-            } else if (c == ',') {
-                fields.add(current.toString());
-                current.setLength(0);
-            } else {
-                current.append(c);
-            }
-        }
-        fields.add(current.toString());
-        return fields;
+        return CsvLine.split(line);
     }
 
     private static String emptyToNull(String value) {

@@ -181,6 +181,9 @@ class TradeApiIT {
         create(PRIYA, trade(null, 1, RELIANCE, "BUY", "10", "2026-10-18"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("tradeDate: 2026-10-18 is not a business day"));
+        create(PRIYA, trade(null, 1, RELIANCE, "BUY", "10", "2026-10-20"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("tradeDate: 2026-10-20 is not a business day"));
     }
 
     @Test
@@ -233,8 +236,9 @@ class TradeApiIT {
         assertThat((Object) JsonPath.read(awaitRecord(Topics.TRADE_SETTLED, manualRef).value(), "$.payload.status"))
                 .isEqualTo("SETTLED");
 
-        // Traded Monday 19-Oct, settles Tuesday 20-Oct: due on Wednesday 21-Oct.
-        long due = id(create(PRIYA, trade(null, 1, RELIANCE, "BUY", "3", "2026-10-19")));
+        // Traded Monday 19-Oct; Tuesday 20-Oct is Dussehra (NSE holiday), so it settles Wednesday 21-Oct: due today.
+        long due = id(create(PRIYA, trade(null, 1, RELIANCE, "BUY", "3", "2026-10-19"))
+                .andExpect(jsonPath("$.settleDate").value("2026-10-21")));
         long notDue = id(create(PRIYA, trade(null, 1, RELIANCE, "BUY", "4", null)));
         while (tradeService.settleDueBatch(200) > 0) {
             // settle everything due

@@ -59,7 +59,7 @@ login() {
 expect_status() {
     local name=$1 expected=$2; shift 2
     local code
-    code=$(curl -sS -o /dev/null -w '%{http_code}' "$@")
+    code=$(curl -sS -o /dev/null -w '%{http_code}' "$@" || true)
     if [[ "$code" == "$expected" ]]; then
         echo "PASS  $name"
     else
@@ -131,6 +131,33 @@ if MSYS_NO_PATHCONV=1 docker compose -f "$(dirname "$0")/../infra/docker-compose
 else
     echo "FAIL  trade.created event published to Kafka"; failures=$((failures + 1))
 fi
+
+# ---------- Phase 4A foundation: holiday calendar and prices ----------
+check "valuation-service registered"          "$EUREKA/eureka/apps/VALUATION-SERVICE" '"VALUATION-SERVICE"'
+
+holidays=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/marketdata/holidays?year=2026")
+if [[ "$holidays" == *'"description":"Dussehra"'* ]]; then
+    echo "PASS  NSE holiday calendar loaded"
+else
+    echo "FAIL  NSE holiday calendar loaded"; failures=$((failures + 1))
+fi
+price=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/marketdata/prices/latest?isin=INE041025011")
+if [[ "$price" == *'"source":"NSE_BHAVCOPY"'* && "$price" == *'"dataDate":"'* ]]; then
+    echo "PASS  real price with source badge (Embassy REIT)"
+else
+    echo "FAIL  real price with source badge: $price"; failures=$((failures + 1))
+fi
+synthetic=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/marketdata/prices/latest?isin=ZZSYN0000001")
+if [[ "$synthetic" == *'"source":"SYNTHETIC"'* && "$synthetic" == *'"fairValueLevel":"L3"'* ]]; then
+    echo "PASS  synthetic instrument priced by an L3 mark"
+else
+    echo "FAIL  synthetic instrument priced by an L3 mark: $synthetic"; failures=$((failures + 1))
+fi
+upload_file="smoke-prices-$$.csv"   # relative path: native Windows curl cannot read Git Bash /tmp paths
+printf 'isin,data_date,price\nINE002A01018,2026-10-14,1174.60\n' > "$upload_file"
+expect_status "PM cannot upload prices (403)"   403 -X POST -H "Authorization: Bearer $PM_TOKEN" \
+    -F "file=@$upload_file;filename=prices.csv" "$GATEWAY/api/v1/marketdata/prices/upload"
+rm -f "$upload_file"
 
 if (( failures > 0 )); then
     echo "$failures check(s) failed"

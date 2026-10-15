@@ -517,6 +517,70 @@
           }
         }
       ]
+    },
+    {
+      "name": "Market data",
+      "item": [
+        {
+          "name": "Latest prices (all instruments, with source badge)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/marketdata/prices/latest"
+          }
+        },
+        {
+          "name": "Latest price: Embassy REIT",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/marketdata/prices/latest?isin=INE041025011"
+          }
+        },
+        {
+          "name": "Latest price: synthetic Deccan Logistics (L3 mark)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/marketdata/prices/latest?isin=ZZSYN0000001"
+          }
+        },
+        {
+          "name": "Price history: Reliance",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/marketdata/prices?isin=INE002A01018"
+          }
+        },
+        {
+          "name": "Ingestion log",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/marketdata/ingestions"
+          }
+        },
+        {
+          "name": "Run synthetic marks (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/marketdata/ingestions",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"SYNTHETIC\"\n}"
+            }
+          }
+        },
+        {
+          "name": "NSE holidays 2026",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/marketdata/holidays?year=2026"
+          }
+        }
+      ]
     }
   ]
 }

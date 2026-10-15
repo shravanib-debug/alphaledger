@@ -1,8 +1,8 @@
-package com.alphaledger.trade.calendar;
+package com.alphaledger.common.calendar;
 
 import java.time.LocalDate;
 
-/** Business days for settlement (prd.md business rule 9): weekdays that are not exchange holidays. */
+/** Business days for settlement and pricing (prd.md business rule 9): weekdays that are not exchange holidays. */
 public interface BusinessDayCalendar {
 
     boolean isBusinessDay(LocalDate date);
@@ -21,5 +21,14 @@ public interface BusinessDayCalendar {
             }
         }
         return date;
+    }
+
+    /** The latest business day on or before {@code date} (the expected price date for staleness checks). */
+    default LocalDate previousOrSameBusinessDay(LocalDate date) {
+        LocalDate day = date;
+        while (!isBusinessDay(day)) {
+            day = day.minusDays(1);
+        }
+        return day;
     }
 }

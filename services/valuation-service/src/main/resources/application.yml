@@ -15,6 +15,33 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
+  servlet:
+    multipart:
+      max-file-size: 2MB
+
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+  market:
+    zone: Asia/Kolkata
+  marketdata:
+    mode: ${MARKETDATA_MODE:OFFLINE}          # OFFLINE (local demo, tests, CI) | LIVE
+    network-enabled: ${MARKETDATA_NETWORK_ENABLED:false}
+    max-staleness-business-days: 5
+    seed-enabled: true                        # committed real seed prices + synthetic marks on startup
+    intraday-ticks-enabled: ${MARKETDATA_INTRADAY_TICKS:false}
+    daily-cron: "0 30 19 * * MON-FRI"
+    # SYNTHETIC is allowed only for PRIVATE (synthetic instruments); startup fails otherwise.
+    # NSE_BHAVCOPY, AMFI_NAV and MFAPI are skipped until their adapters exist (deferred part of Phase 4A).
+    fallback-order:
+      EQUITY: [NSE_BHAVCOPY]
+      REIT: [NSE_BHAVCOPY]
+      INVIT: [NSE_BHAVCOPY]
+      GSEC: [NSE_BHAVCOPY]
+      BOND: [NSE_BHAVCOPY]
+      MUTUAL_FUND: [AMFI_NAV, MFAPI]
+      PRIVATE: [SYNTHETIC]
 
 eureka:
   client:

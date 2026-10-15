@@ -39,6 +39,11 @@
             <optional>true</optional>
         </dependency>
         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <optional>true</optional>
@@ -55,4 +60,21 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- Committed reference data (instrument master, NSE holidays, synthetic marks, seed prices), shared by
+                 every service at classpath:reference-data/... -->
+            <resource>
+                <directory>${project.basedir}/../reference-data</directory>
+                <targetPath>reference-data</targetPath>
+                <includes>
+                    <include>**/*.csv</include>
+                </includes>
+            </resource>
+        </resources>
+    </build>
 </project>

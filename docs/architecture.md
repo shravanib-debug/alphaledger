@@ -274,7 +274,7 @@ public interface PriceSource {
 | `AmfiNavPriceSource` | `MUTUAL_FUND` | `HTTP` (AMFI) or `LOCAL_DIR`; Spring Batch job (reader → processor → writer) | Primary for mutual funds |
 | `MfApiPriceSource` | `MUTUAL_FUND` | `HTTP` (mfapi.in JSON) | Fallback for missing NAVs and history backfill only; never required |
 | `SyntheticPriceSource` | Only `is_synthetic = true` instruments, plus demo intraday ticks in `OFFLINE` mode | In-process (committed quarterly marks for synthetic private instruments; seeded random walk for `OFFLINE` intraday ticks) | Offline/demo/test |
-| `CsvUploadPriceSource` | All | Manual upload (existing endpoint) | Manual override |
+| `CsvUploadPriceSource` (implemented as `CsvPriceFile`, an upload parser rather than a scheduled source) | All real instruments | Manual upload (`POST /api/v1/marketdata/prices/upload`, Admin); rows may declare a real provenance (`NSE_BHAVCOPY`, `AMFI_NAV`, `YFINANCE`), never `SYNTHETIC` | Manual override; also loads the committed seed closes |
 
 yfinance (`.NS` / `.BO` tickers) is **not** an automated adapter: it is unofficial and Python-only. As a last resort, `scripts/market-data/yf_fallback.py` (stretch) can write a CSV that is loaded through `CsvUploadPriceSource` with `source = YFINANCE`.
 
@@ -475,7 +475,8 @@ erDiagram
 - `reference-data/instruments/instrument_master.csv`: `instrument_id` (stable integer, never reused or renumbered), ISIN, symbol, exchange, name, `instrument_type`, `asset_class`, `asset_class_proxy`, `amfi_scheme_code`, `is_synthetic`. Built once from the NSE equity list (`https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv`, columns `SYMBOL,NAME OF COMPANY, SERIES, DATE OF LISTING, PAID UP VALUE, MARKET LOT, ISIN NUMBER, FACE VALUE`), the bhavcopy (REITs, InvITs, G-secs, NCDs), and `NAVAll.txt` (mutual funds). Both `portfolio_db.instrument(id)` and `valuation_db.instrument_ref(instrument_id)` are seeded from the same `instrument_id` column of this one CSV (no database-generated IDs for seeded rows), so IDs are identical across services and the two copies cannot drift in v1. Events carry both `instrumentId` and `isin`; ISIN is the fallback join key. Instruments created later through the API need an `instrument.upserted` event, which is out of scope for v1.
 
 #### Offline sample dataset and network policy
-- `reference-data/sample/prices/`: bhavcopy and NAVAll files **filtered to the demo ISINs** for the demo window (a few hundred rows in total), in the original formats so the real parsers run against them.
+- `reference-data/sample/prices/seed_closes_2026-10-14.csv` (committed now): the 14-Oct-2026 closes of the 26 real demo instruments, hand-filtered from that day's NSE bhavcopy (19) and AMFI NAVAll (7), each row recording its real source. Loaded on startup through the CSV path, so the demo has real prices before the adapters exist.
+- `reference-data/sample/prices/` (with the adapters): bhavcopy and NAVAll files **filtered to the demo ISINs** for the demo window (a few hundred rows in total), in the original formats so the real parsers run against them.
 - `reference-data/synthetic/synthetic_marks.csv`: the committed quarterly marks for the synthetic private instruments. They are used in both `OFFLINE` and `LIVE` mode, so they live outside the sample folder.
 - `scripts/market-data/download.sh` refreshes the local cache from the public URLs; `scripts/market-data/make-sample.sh` regenerates the filtered sample. Raw files are cached in git-ignored `data/market-cache/` and never committed.
 - Unit tests parse saved sample files; integration tests and CI run with `mode=OFFLINE` and `network-enabled=false`, so the build never calls external sites.
@@ -526,14 +527,15 @@ processed_event(event_id PK, processed_at)
 instrument_ref(instrument_id PK, isin UNIQUE NOT NULL, symbol, exchange, instrument_type,
                asset_class, asset_class_proxy, amfi_scheme_code, is_synthetic)  -- read copy of portfolio_db.instrument, same instrument_id (seeded from instrument_master.csv)
 price(id, instrument_id, isin, price, currency DEFAULT 'INR', data_date, as_of_timestamp,
-      source, ingestion_id NULL FK)
+      source, fair_value_level NULL, ingestion_id NULL FK)          -- fair_value_level = L3 for synthetic marks
       -- UNIQUE(instrument_id, data_date, source)       WHERE source <> 'SYNTHETIC'  (real end-of-day prices)
       -- UNIQUE(instrument_id, as_of_timestamp, source) WHERE source =  'SYNTHETIC'  (synthetic intraday ticks and quarterly marks)
       -- source: NSE_BHAVCOPY | AMFI_NAV | MFAPI | SYNTHETIC | CSV_UPLOAD | YFINANCE; data_date = date the source says the price is for
 holiday_calendar(holiday_date, exchange DEFAULT 'NSE', segment DEFAULT 'CM', description,
                  PRIMARY KEY(holiday_date, exchange, segment))
 price_ingestion_log(id, source, data_date, file_name, file_checksum, rows_read, rows_loaded, rows_rejected,
-                    status, error_message, started_at, completed_at, UNIQUE(source, file_checksum))
+                    status, error_message, started_at, completed_at)
+                    -- UNIQUE(source, file_checksum) WHERE status IN ('SUCCESS','PARTIAL'): a file loads once; repeats are logged
                     -- status: RUNNING | SUCCESS | PARTIAL | FAILED | SKIPPED_DUPLICATE
 price_ingestion_error(id, ingestion_id FK, row_number, isin, reason, raw_row)
 valuation_snapshot(id, portfolio_id, as_of_date, market_value, cash_balance DEFAULT 0, total_liabilities DEFAULT 0,
@@ -608,8 +610,11 @@ dq_check_result(id, check_name, run_at, status, details)
 | Valuation | `GET/POST /api/v1/portfolios/{id}/cash` | Cash balance and deposit/withdrawal entries (v1.5) |
 | Valuation | `GET/POST /api/v1/portfolios/{id}/liabilities` | Liabilities and accruals (v1.5) |
 | Valuation | `GET /api/v1/portfolios/{id}/exposure` | Exposure by asset class |
-| Valuation | `POST /api/v1/marketdata/ingestions` | Trigger ingestion for a source and data date or date range (backfill) |
-| Valuation | `GET /api/v1/marketdata/ingestions?source=&from=&to=` | Price ingestion log, with rejected rows per run |
+| Valuation | `POST /api/v1/marketdata/ingestions` (Admin) | Run one source, or the daily fallback run, for a data date (range backfill comes with the adapters) |
+| Valuation | `GET /api/v1/marketdata/ingestions?source=&limit=`, `GET /api/v1/marketdata/ingestions/{id}/errors` | Price ingestion log and its rejected rows |
+| Valuation | `GET /api/v1/marketdata/prices/latest?isin=&instrumentId=&asOf=` | Latest price(s) with source badge, data date and staleness |
+| Valuation | `GET /api/v1/marketdata/prices?isin=&from=&to=` | Price history |
+| Valuation | `POST /api/v1/marketdata/prices/upload` (multipart CSV, Admin) | Manual price upload |
 | Valuation | `GET /api/v1/marketdata/holidays?year=` | Holiday calendar |
 | Recon | `POST /api/v1/recon/runs` (multipart) | Upload file and start run |
 | Recon | `GET /api/v1/recon/runs/{id}` | Run summary |
@@ -766,7 +771,8 @@ alphaledger/
 │   ├── instruments/instrument_master.csv   # real ISINs + synthetic instruments
 │   ├── holidays/nse_cm_holidays_2026.csv
 │   ├── synthetic/synthetic_marks.csv       # quarterly marks for synthetic private instruments
-│   └── sample/prices/            # small filtered bhavcopy + NAVAll sample
+│   └── sample/prices/            # seed closes now; filtered bhavcopy + NAVAll sample with the adapters
+│                                 # (all reference-data CSVs are packaged in the common jar: classpath:reference-data/...)
 ├── data/market-cache/            # raw downloads (git-ignored, never committed)
 ├── scripts/
 │   ├── seed-data/
@@ -798,6 +804,7 @@ alphaledger/
 | 14 | HS256 shared-secret JWTs, validated at the gateway and again in every service | Simple to run locally (one secret from `JWT_SECRET`, no key server); defense in depth means a service reached directly still rejects forged or expired tokens | Every service holds the signing secret, so any compromised service could mint tokens; the upgrade path is RS256 with auth-service publishing a JWK set |
 | 15 | trade-service validates portfolio and instrument with a synchronous call to portfolio-service (through Eureka, forwarding the caller's token); holdings for the SELL check come from trade-service's own trades | A trade must be checked against current master data before it is accepted; trade-service already holds every trade, so the holding is exact without waiting for position-service | Trade capture depends on portfolio-service being up (503 `DEPENDENCY_UNAVAILABLE` otherwise; circuit breaker in Phase 6); master data is read per request rather than cached |
 | 16 | Business rule failures are stored as REJECTED trades (201 with a reason); malformed requests get 400 and are not stored | The blotter and audit trail show every attempted trade, as in real trade capture | Clients must check `status`, not just the HTTP code |
+| 17 | Build the market-data foundation (PriceSource, synthetic marks, CSV upload, real seed closes, NSE holidays) now; defer the live NSE/AMFI/mfapi adapters until after reconciliation (Phase 5) | Gets the end-to-end flow (trade → position → value → reconciliation) working first while still using real prices (a committed seed of real closes); the adapters are the riskiest work (external formats, throttling, terms) and slot in behind the same interface | Prices stay at the seed date until the adapters land (shown as stale with their data date); manual CSV upload is the stop-gap for fresher prices |
 
 ---
 

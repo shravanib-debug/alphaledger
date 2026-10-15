@@ -3,9 +3,11 @@ package com.alphaledger.trade.config;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.ZoneId;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
@@ -13,11 +15,15 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import com.alphaledger.common.calendar.BusinessDayCalendar;
+import com.alphaledger.common.calendar.JdbcHolidayCalendarLoader;
+import com.alphaledger.common.calendar.MarketClock;
 import com.alphaledger.common.web.CorrelationId;
 
 @Configuration
@@ -28,6 +34,18 @@ public class TradeConfig {
     @Bean
     public Clock clock() {
         return Clock.systemUTC();
+    }
+
+    /** "Today" in the market's time zone (Asia/Kolkata), not the server's UTC date. */
+    @Bean
+    public MarketClock marketClock(Clock clock, @Value("${alphaledger.market.zone:Asia/Kolkata}") ZoneId zone) {
+        return new MarketClock(clock, zone);
+    }
+
+    /** Weekends plus NSE trading holidays, loaded from the committed holiday files into holiday_calendar. */
+    @Bean
+    public BusinessDayCalendar businessDayCalendar(JdbcTemplate jdbc) {
+        return JdbcHolidayCalendarLoader.load(jdbc);
     }
 
     /**

@@ -16,7 +16,7 @@
 | 1 | Foundation & Infrastructure | Monorepo, Docker infra, Gateway, Eureka, Config | ✅ |
 | 2 | Auth & Portfolio Core | Login/JWT/RBAC, portfolios and instruments | ✅ |
 | 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ✅ |
-| 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | ⬜ |
+| 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | 🟨 |
 | 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ⬜ |
 | 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ⬜ |
 | 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ⬜ |
@@ -27,7 +27,7 @@
 | 10 | Polish, Docs & Demo | README, diagrams, demo data, walkthrough | ⬜ |
 | 11 | Stretch Goals (optional) | Flink/Spark, Snowflake, K8s, cloud | ⬜ |
 
-**Suggested order note:** the React frontend (Phase 8) can be started in parallel with Phase 5 once the Trade and Position APIs are stable. Phase 4A runs after Phase 3 and before Phase 4, because Phase 4's valuation reads prices through the `PriceSource` built in 4A; it is numbered 4A so existing phases keep their numbers.
+**Suggested order note:** the React frontend (Phase 8) can be started in parallel with Phase 5 once the Trade and Position APIs are stable. Phase 4A is split: its foundation (`PriceSource`, synthetic marks, CSV upload, real seed closes, NSE holiday calendar and T+1) is done before Phase 4, which needs prices; the real NSE bhavcopy/AMFI/mfapi adapters, file cache, download scripts and full offline sample follow after Phase 5, so the end-to-end flow (trade → position → value → reconciliation) works first. It is numbered 4A so existing phases keep their numbers.
 
 ---
 
@@ -139,13 +139,13 @@
 **Goal:** Replace mock prices with real public end-of-day prices (NSE bhavcopy, AMFI NAV) behind a pluggable `PriceSource`, while keeping the demo, tests, and CI fully offline. Trades, positions, and custodian files stay synthetic.
 
 ### PriceSource foundation
-- [ ] `PriceSource` interface, `PriceBatch`/`PriceRecord` model, and config-driven fallback order per instrument type (`architecture.md` §5.3)
-- [ ] `SyntheticPriceSource`: prices only `is_synthetic = true` instruments (committed quarterly marks in `reference-data/synthetic/synthetic_marks.csv`), plus seeded random-walk intraday ticks in `OFFLINE` mode only; removed from the fallback lists of all real instrument types
-- [ ] `CsvUploadPriceSource` wired to the existing CSV price upload
+- [x] `PriceSource` interface, `PriceBatch`/`PriceRecord` model, and config-driven fallback order per instrument type (`architecture.md` §5.3)
+- [x] `SyntheticPriceSource`: prices only `is_synthetic = true` instruments (committed quarterly marks in `reference-data/synthetic/synthetic_marks.csv`), plus seeded random-walk intraday ticks in `OFFLINE` mode only; removed from the fallback lists of all real instrument types
+- [x] `CsvUploadPriceSource` wired to the existing CSV price upload
 - [ ] `mode` (`OFFLINE` / `LIVE`) and `network-enabled` guard; HTTP fetch throws when the guard is off
 - [ ] Unit tests for fallback order and gap filling
-- [ ] Tests: in `LIVE` mode a real instrument with no real price keeps its last real price, flagged stale, and never gets a `SYNTHETIC` price
-- [ ] Price API responses include `source` and `data_date` so the UI can show a source badge next to every price
+- [x] Tests: in `LIVE` mode a real instrument with no real price keeps its last real price, flagged stale, and never gets a `SYNTHETIC` price
+- [x] Price API responses include `source` and `data_date` so the UI can show a source badge next to every price
 
 ### Source adapters
 - [ ] Save real sample files (bhavcopy for a few dates, a trimmed NAVAll.txt) as test fixtures
@@ -157,23 +157,23 @@
 - [ ] Confirm every item marked **TO VERIFY** in `architecture.md` §5.8 and update the docs
 
 ### Idempotency and logging
-- [ ] Flyway migrations: `price.source`, `price.data_date`, `price.ingestion_id`, `instrument_ref`, `holiday_calendar`, `price_ingestion_log`, `price_ingestion_error`
+- [x] Flyway migrations: `price.source`, `price.data_date`, `price.ingestion_id`, `instrument_ref`, `holiday_calendar`, `price_ingestion_log`, `price_ingestion_error`
 - [ ] Raw file cache on disk (`data/market-cache/`, git-ignored) with SHA-256 checksum
-- [ ] Same file ingested twice → `SKIPPED_DUPLICATE`, 0 new rows (test)
-- [ ] `price_ingestion_log` rows with rows read/loaded/rejected and status; rejected rows in `price_ingestion_error`
+- [x] Same file ingested twice → `SKIPPED_DUPLICATE`, 0 new rows (test)
+- [x] `price_ingestion_log` rows with rows read/loaded/rejected and status; rejected rows in `price_ingestion_error`
 - [ ] Ingestion log and trigger/backfill endpoints (`/api/v1/marketdata/ingestions`)
-- [ ] Stale-price flag when `data_date` is earlier than the expected price date (latest business day; latest quarter-end for synthetic instruments), plus a DQ warning after `max-staleness-business-days`
+- [x] Stale-price flag when `data_date` is earlier than the expected price date (latest business day; latest quarter-end for synthetic instruments), plus a DQ warning after `max-staleness-business-days`
 
 ### Calendar and settlement
-- [ ] Commit `reference-data/holidays/nse_cm_holidays_2026.csv` from NSE's published 2026 list
-- [ ] Load the calendar into `trade_db.holiday_calendar` and `valuation_db.holiday_calendar`
-- [ ] Trade Service: `BusinessDayCalendar` uses the holiday table for T+1 settle dates and the auto-settlement job
-- [ ] **TDD:** T+1 tests for weekday, Friday → Monday, and holiday (trade 19-Oct-2026 → settle 21-Oct-2026, because 20-Oct-2026 is Dussehra)
+- [x] Commit `reference-data/holidays/nse_cm_holidays_2026.csv` from NSE's published 2026 list
+- [x] Load the calendar into `trade_db.holiday_calendar` and `valuation_db.holiday_calendar`
+- [x] Trade Service: `BusinessDayCalendar` uses the holiday table for T+1 settle dates and the auto-settlement job
+- [x] **TDD:** T+1 tests for weekday, Friday → Monday, and holiday (trade 19-Oct-2026 → settle 21-Oct-2026, because 20-Oct-2026 is Dussehra)
 
 ### Reference data and offline sample
-- [ ] Build `reference-data/instruments/instrument_master.csv` with real ISINs (from NSE `EQUITY_L.csv`, bhavcopy, NAVAll.txt) plus 3 synthetic `ZZSYN…` instruments; reseed portfolio-service and valuation-service from it
-- [ ] Add a stable `instrument_id` column to the instrument master; seed `portfolio_db.instrument(id)` and `valuation_db.instrument_ref(instrument_id)` from it so IDs are identical across services (test: same ID for every ISIN in both services); events keep `isin` as the fallback join key
-- [ ] Re-check every demo ISIN against the latest source files before seeding
+- [x] Build `reference-data/instruments/instrument_master.csv` with real ISINs (from NSE `EQUITY_L.csv`, bhavcopy, NAVAll.txt) plus 3 synthetic `ZZSYN…` instruments; reseed portfolio-service and valuation-service from it
+- [x] Add a stable `instrument_id` column to the instrument master; seed `portfolio_db.instrument(id)` and `valuation_db.instrument_ref(instrument_id)` from it so IDs are identical across services (test: same ID for every ISIN in both services); events keep `isin` as the fallback join key
+- [x] Re-check every demo ISIN against the latest source files before seeding
 - [ ] `scripts/market-data/download.sh` (polite, cached, one request per file) and `make-sample.sh` (filter to demo ISINs)
 - [ ] Commit the small filtered sample (`reference-data/sample/prices/`) covering the demo window
 - [ ] Trade generator uses real historical closes from the sample for synthetic trade prices
@@ -470,5 +470,6 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-15 | 1 | Phase 1 complete. Spring Boot 4.0.8 + Spring Cloud 2025.1.3 (ADR 13), Maven Wrapper 3.9.16, 13 modules (`common`, 3 platform services, 8 business-service skeletons with Actuator, Flyway baseline, Eureka and config clients). `infra/docker-compose.yml`: Postgres 16 (8 DBs), Kafka 4.2 KRaft, Kafka UI, MailHog, Eureka, config server, gateway, portfolio-service. `./mvnw verify`: 34 tests green. `scripts/smoke-test.sh`: 8/8 checks pass (health, shared config, Eureka registration, gateway routing, correlation ID). |
 | 2026-10-15 | 2 | Phase 2 complete. auth-service: users/roles (`app_user`, `role`, `refresh_token`), BCrypt, HS256 access tokens (15 min) + rotating opaque refresh tokens (7 days, reuse revokes all), login/refresh/logout/me, Admin-only user management, 4 demo users (IDs 1-4). Gateway: JWT validation, spoof-proof `X-User-*` headers, JSON 401/403. portfolio-service: portfolios, funds, instruments (ISIN check-digit validation), PM-owns-portfolio rules, `@PreAuthorize`, instrument master `reference-data/instruments/instrument_master.csv` loaded with stable IDs 1-29 (pulled forward from Phase 4A), 3 demo portfolios with 7 funds. OpenAPI + Swagger UI on auth and portfolio. Postman collection in `docs/postman/`. `./mvnw verify`: 91 tests (incl. Testcontainers ITs) green; smoke test 22/22. ADR 14 (HS256 shared secret). |
 | 2026-10-15 | 3 | Phase 3 complete. trade-service: capture with validation (dates on business days, T+1 default via `BusinessDayCalendar`, weekends-only until 4A), portfolio/instrument checks via portfolio-service (ADR 15), SELL-above-holding check under a Postgres advisory lock, REJECTED trades stored with reasons (ADR 16), idempotent `tradeRef`, blotter, cancel (guards dependent SELLs), Admin manual settle, auto-settlement job (market time zone, SKIP LOCKED), `trade_audit` on every change, transactional outbox + relay to `trade.created`/`trade.settled`/`trade.cancelled`, CSV upload. Event schemas in `docs/events.md`. Tests: 28 unit + 9 Testcontainers ITs (Postgres + Kafka); smoke test 27/27. Fixed: Eureka client picking up the load-balanced RestClient builder. |
+| 2026-10-15 | 4A | Phase 4A foundation done (rest deferred until after Phase 5, ADR 17). NSE CM 2026 holiday calendar committed and loaded into trade_db and valuation_db; T+1 now skips NSE holidays (19-Oct trade settles 21-Oct, Dussehra). valuation-service: `PriceSource` interface + registry (startup fails if SYNTHETIC is configured for a real instrument type), `SyntheticPriceSource` (L3 quarterly marks; OFFLINE-only intraday ticks, off by default), CSV price upload with declared provenance, real seed closes for all 26 instruments (14-Oct-2026, from NSE bhavcopy and AMFI NAVAll), price table with source/data_date and partial unique indexes, ingestion log with checksum idempotency and rejected rows, latest price with source badge and staleness. Reference data packaged in the common jar. Tests: common 34, valuation 10 unit + 6 ITs; smoke test 32/32. |
 | | | |
 | | | |

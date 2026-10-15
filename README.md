@@ -2,7 +2,7 @@
 
 Portfolio management and trade reconciliation platform for Indian markets: an event-driven Java/Spring Boot microservices system where trades flow in, positions and portfolio market value update automatically, and settled trades are reconciled against a custodian file, with breaks managed in a React dashboard.
 
-**Status:** Phase 3 (trade capture, outbox and Kafka events) complete. See the [roadmap](docs/roadmap.md).
+**Status:** Phase 3 (trade capture, outbox and Kafka events) complete; Phase 4A foundation (prices with source badges, NSE holiday calendar, T+1) done. See the [roadmap](docs/roadmap.md).
 
 ## Running locally
 
@@ -25,6 +25,7 @@ docker compose -f infra/docker-compose.yml down         # stop (add -v to also d
 | http://localhost:8081/swagger-ui.html | auth-service API docs |
 | http://localhost:8082/swagger-ui.html | portfolio-service API docs |
 | http://localhost:8083/swagger-ui.html | trade-service API docs |
+| http://localhost:8085/swagger-ui.html | valuation-service API docs (market data) |
 
 Local credentials and ports can be overridden by copying `infra/.env.example` to `infra/.env`.
 
@@ -79,6 +80,18 @@ The trade is stored as VALIDATED (or REJECTED with a `rejectionReason`, e.g. a S
 
 ## Data
 Prices and instrument reference data come from public end-of-day sources (NSE bhavcopy, AMFI NAVs). Trades, positions, custodian files and reconciliation breaks are synthetic. Personal, non-commercial portfolio project; no raw market data is committed to this repository.
+
+Today the demo uses a committed seed of real closes for 14-Oct-2026 (26 instruments, filtered by hand from that
+day's NSE bhavcopy and AMFI NAVAll) plus invented quarterly marks for the 3 clearly labelled synthetic private
+instruments. Every price carries its source and data date, and is flagged stale when older than the expected date:
+
+```bash
+curl -s -H "Authorization: Bearer <accessToken>" "localhost:8080/api/v1/marketdata/prices/latest?isin=INE041025011"
+```
+
+Settlement is T+1 on business days: weekends and NSE trading holidays (`reference-data/holidays/`) are skipped, so a
+trade on Monday 19-Oct-2026 settles on Wednesday 21-Oct (Tuesday is Dussehra). Live NSE/AMFI downloads arrive later
+(roadmap Phase 4A, deferred part).
 
 ## License
 Code: [MIT](LICENSE). Third-party market data stays under its source's terms.

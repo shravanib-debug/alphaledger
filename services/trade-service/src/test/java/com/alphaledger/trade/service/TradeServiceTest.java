@@ -30,8 +30,8 @@ import com.alphaledger.common.error.ConflictException;
 import com.alphaledger.common.error.ValidationException;
 import com.alphaledger.common.event.Topics;
 import com.alphaledger.common.security.AuthenticatedUser;
-import com.alphaledger.trade.calendar.MarketClock;
-import com.alphaledger.trade.calendar.WeekendBusinessDayCalendar;
+import com.alphaledger.common.calendar.MarketClock;
+import com.alphaledger.common.calendar.HolidayCalendar;
 import com.alphaledger.trade.client.PortfolioClient;
 import com.alphaledger.trade.client.PortfolioClient.InstrumentInfo;
 import com.alphaledger.trade.client.PortfolioClient.PortfolioInfo;
@@ -65,7 +65,7 @@ class TradeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TradeService(trades, audits, portfolios, new WeekendBusinessDayCalendar(),
+        service = new TradeService(trades, audits, portfolios, new HolidayCalendar(java.util.List.of(LocalDate.of(2026, 10, 20))),
                 new MarketClock(CLOCK, ZoneId.of("Asia/Kolkata")), holdings, outbox, refs,
                 new TradeProperties(null, 1, 1));
         when(trades.save(any())).thenAnswer(invocation -> {
@@ -146,6 +146,16 @@ class TradeServiceTest {
                 PRIYA)).hasMessage("settleDate: must be on or after tradeDate");
         assertThatThrownBy(() -> service.create(request(null, 1L, TradeSide.BUY, "1", TODAY, LocalDate.of(2026, 10, 24)),
                 PRIYA)).hasMessage("settleDate: 2026-10-24 is not a business day");
+    }
+
+    @Test
+    void settlementSkipsNseHolidays() {
+        // Monday 19-Oct-2026: Tuesday 20-Oct is Dussehra, so T+1 is Wednesday.
+        assertThat(service.resolveSettleDate(LocalDate.of(2026, 10, 19), null)).isEqualTo(LocalDate.of(2026, 10, 21));
+        assertThatThrownBy(() -> service.resolveSettleDate(LocalDate.of(2026, 10, 20), null))
+                .hasMessage("tradeDate: 2026-10-20 is not a business day");
+        assertThatThrownBy(() -> service.resolveSettleDate(LocalDate.of(2026, 10, 19), LocalDate.of(2026, 10, 20)))
+                .hasMessage("settleDate: 2026-10-20 is not a business day");
     }
 
     @Test
