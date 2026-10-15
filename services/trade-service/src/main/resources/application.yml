@@ -15,6 +15,33 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+  servlet:
+    multipart:
+      max-file-size: 2MB
+
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+  market:
+    zone: Asia/Kolkata         # trading day and settlement dates follow NSE time
+  trade:
+    portfolio-service-url: http://portfolio-service
+    settlement-days: 1         # T+1
+    kafka-replicas: 1
+    auto-settlement:
+      cron: "0 */15 * * * *"
+  outbox:
+    relay:
+      poll-interval-ms: 500
 
 eureka:
   client:

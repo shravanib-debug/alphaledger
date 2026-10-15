@@ -2,7 +2,7 @@
 
 Portfolio management and trade reconciliation platform for Indian markets: an event-driven Java/Spring Boot microservices system where trades flow in, positions and portfolio market value update automatically, and settled trades are reconciled against a custodian file, with breaks managed in a React dashboard.
 
-**Status:** Phase 2 (authentication, portfolios and instruments) complete. See the [roadmap](docs/roadmap.md).
+**Status:** Phase 3 (trade capture, outbox and Kafka events) complete. See the [roadmap](docs/roadmap.md).
 
 ## Running locally
 
@@ -24,6 +24,7 @@ docker compose -f infra/docker-compose.yml down         # stop (add -v to also d
 | http://localhost:8025 | MailHog (captured emails) |
 | http://localhost:8081/swagger-ui.html | auth-service API docs |
 | http://localhost:8082/swagger-ui.html | portfolio-service API docs |
+| http://localhost:8083/swagger-ui.html | trade-service API docs |
 
 Local credentials and ports can be overridden by copying `infra/.env.example` to `infra/.env`.
 
@@ -45,6 +46,19 @@ curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/j
 ```
 
 Or import `docs/postman/AlphaLedger.postman_collection.json` into Postman and run a "Login as ..." request first.
+
+### Capturing a trade
+
+As Priya (PM), buy 500 units of Embassy Office Parks REIT for the Bharat Real Assets Fund (portfolio 2). Trade date
+defaults to today and settle date to T+1 business day:
+
+```bash
+curl -s -X POST localhost:8080/api/v1/trades -H "Authorization: Bearer <accessToken>" -H 'Content-Type: application/json' \
+  -d '{"portfolioId":2,"isin":"INE041025011","side":"BUY","quantity":500,"price":435.00}'
+```
+
+The trade is stored as VALIDATED (or REJECTED with a `rejectionReason`, e.g. a SELL above the holding), audited, and a
+`trade.created` event appears on Kafka (see Kafka UI, topic `trade.created`). Event formats: [docs/events.md](docs/events.md).
 
 ## Repository layout
 

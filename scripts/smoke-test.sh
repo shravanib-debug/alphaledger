@@ -102,6 +102,36 @@ else
     echo "FAIL  instrument lookup by ISIN"; failures=$((failures + 1))
 fi
 
+# ---------- Phase 3: trade capture, outbox and Kafka ----------
+check "trade-service registered"              "$EUREKA/eureka/apps/TRADE-SERVICE"   '"TRADE-SERVICE"'
+
+SMOKE_REF="SMOKE-$(date +%s)"
+# Trades need a business day; on a weekend use the previous Friday (date in India, the market's time zone).
+trade_date=$(TZ=Asia/Kolkata date +%F)
+while [[ $(date -d "$trade_date" +%u) -gt 5 ]]; do trade_date=$(date -d "$trade_date - 1 day" +%F); done
+trade=$(curl -sS -X POST "$GATEWAY/api/v1/trades" -H "Authorization: Bearer $PM_TOKEN" -H 'Content-Type: application/json' \
+    -d "{\"tradeRef\":\"$SMOKE_REF\",\"portfolioId\":2,\"isin\":\"INE041025011\",\"side\":\"BUY\",\"quantity\":500,\"price\":435.00,\"tradeDate\":\"$trade_date\"}")
+if [[ "$trade" == *'"status":"VALIDATED"'* ]]; then
+    echo "PASS  PM captures a trade through the gateway (VALIDATED)"
+else
+    echo "FAIL  PM captures a trade through the gateway: $trade"; failures=$((failures + 1))
+fi
+expect_status "auditor cannot capture trades (403)" 403 -X POST -H "Authorization: Bearer $AUDITOR_TOKEN" \
+    -H 'Content-Type: application/json' -d '{"portfolioId":2,"isin":"INE041025011","side":"BUY","quantity":1,"price":1}' \
+    "$GATEWAY/api/v1/trades"
+expect_status "auditor reads the blotter (200)"     200 -H "Authorization: Bearer $AUDITOR_TOKEN" \
+    "$GATEWAY/api/v1/trades?portfolioId=2"
+
+# The outbox relay publishes within about a second; read trade.created from the beginning and look for our trade.
+# MSYS_NO_PATHCONV stops Git Bash on Windows from rewriting /opt/... into a Windows path (no effect elsewhere).
+if MSYS_NO_PATHCONV=1 docker compose -f "$(dirname "$0")/../infra/docker-compose.yml" exec -T kafka \
+        /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:29092 --topic trade.created \
+        --from-beginning --timeout-ms 15000 2>/dev/null | grep -q "$SMOKE_REF"; then
+    echo "PASS  trade.created event published to Kafka"
+else
+    echo "FAIL  trade.created event published to Kafka"; failures=$((failures + 1))
+fi
+
 if (( failures > 0 )); then
     echo "$failures check(s) failed"
     exit 1

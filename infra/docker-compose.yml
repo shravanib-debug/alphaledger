@@ -1,4 +1,4 @@
-# AlphaLedger local stack: infrastructure, platform services, auth-service and portfolio-service.
+# AlphaLedger local stack: infrastructure, platform services, auth-, portfolio- and trade-service.
 # Run from the repo root:  docker compose -f infra/docker-compose.yml up -d --build
 # Business services are added here as their phases land; Compose profiles arrive in Phase 9.
 
@@ -177,6 +177,32 @@ services:
       - "8082:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+
+  trade-service:
+    <<: *java-service
+    build:
+      context: ..
+      dockerfile: infra/docker/service.Dockerfile
+      args:
+        MODULE: trade-service
+    environment:
+      <<: *java-env
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_USER: ${POSTGRES_USER:-alphaledger}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-alphaledger}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
       discovery-server:
         condition: service_healthy

@@ -503,13 +503,14 @@ instrument(id, isin UNIQUE NOT NULL, symbol NULL, exchange,              -- id s
 
 ### 6.3 `trade_db`
 ```
-trade(id, trade_ref UNIQUE, portfolio_id, instrument_id, isin, side, quantity, price,
+trade(id, trade_ref UNIQUE, portfolio_id, instrument_id NULL, isin, side, quantity NUMERIC(20,4), price NUMERIC(20,6),
       currency DEFAULT 'INR', trade_date, settle_date,                 -- settle_date defaults to trade_date + 1 business day
-      status, created_by, created_at, updated_at)
-trade_audit(id, trade_id, from_status, to_status, changed_by, changed_at, comment)
+      status, rejection_reason, created_by, created_at, updated_at, version)   -- instrument_id NULL only if rejected (unknown ISIN)
+trade_audit(id, trade_id FK, from_status, to_status, changed_by NULL, changed_at, comment)  -- changed_by NULL = system (auto-settle)
 holiday_calendar(holiday_date, exchange DEFAULT 'NSE', segment DEFAULT 'CM', description,
                  PRIMARY KEY(holiday_date, exchange, segment))         -- loaded from the committed CSV
-outbox_event(id, aggregate_id, event_type, payload JSONB, status, created_at, sent_at)
+outbox_event(id UUID, aggregate_type, aggregate_id, event_type, topic, message_key, payload JSONB, status PENDING|SENT,
+             attempts, last_error, created_at, sent_at)        -- relay claims rows with FOR UPDATE SKIP LOCKED
 ```
 
 ### 6.4 `position_db`
@@ -595,10 +596,12 @@ dq_check_result(id, check_name, run_at, status, details)
 | Portfolio | `GET/POST /api/v1/portfolios`, `GET/PUT /api/v1/portfolios/{id}` | List / create / get / update portfolios |
 | Portfolio | `POST /api/v1/portfolios/{id}/archive`, `POST /api/v1/portfolios/{id}/funds` | Archive a portfolio / add a fund |
 | Portfolio | `GET/POST /api/v1/instruments`, `GET/PUT /api/v1/instruments/{id}` | Search (`assetClass`, `instrumentType`, `isin`, `q`) / create / get / update instruments |
-| Trade | `POST /api/v1/trades` | Create trade |
-| Trade | `GET /api/v1/trades?portfolioId=&status=&from=&to=` | Trade blotter |
-| Trade | `POST /api/v1/trades/{id}/cancel` | Cancel trade |
-| Trade | `POST /api/v1/trades/{id}/settle` | Manual settle |
+| Trade | `POST /api/v1/trades` | Create trade: 201 (VALIDATED, or REJECTED with a reason); 200 when the same `tradeRef` is replayed |
+| Trade | `POST /api/v1/trades/upload` (multipart CSV) | Bulk upload; per-row result summary |
+| Trade | `GET /api/v1/trades?portfolioId=&status=&isin=&side=&from=&to=` | Trade blotter |
+| Trade | `GET /api/v1/trades/{id}`, `GET /api/v1/trades/{id}/audit` | Trade and its status history |
+| Trade | `POST /api/v1/trades/{id}/cancel` | Cancel trade (Admin, or the managing PM) |
+| Trade | `POST /api/v1/trades/{id}/settle` | Manual settle (Admin) |
 | Position | `GET /api/v1/portfolios/{id}/positions` | Current holdings |
 | Valuation | `GET /api/v1/portfolios/{id}/valuation` | Current market value (and NAV once v1.5 ships) |
 | Valuation | `GET /api/v1/portfolios/{id}/valuation/history` | Valuation time series |
@@ -793,6 +796,8 @@ alphaledger/
 | 12 | Java 21 (LTS) instead of Java 17 | Current mainstream LTS supported by Spring Boot 4.0; records, pattern matching for `switch`, sequenced collections, and virtual threads suit events, state machines, and download jobs | Some older JDs list Java 17; code would need little change to target 17 |
 | 13 | Spring Boot 4.0 + Spring Cloud 2025.1 instead of Spring Boot 3.x | The Spring Boot 3.x line no longer receives open-source updates (3.5.16 was its last release); 4.0.x with Spring Cloud 2025.1.x is the newest pair with a matching Spring Cloud release (Spring Boot 4.1 has none yet) | Fewer tutorials than 3.x; Boot 4 renamed some starters (e.g. `spring-boot-starter-webmvc`, `spring-boot-starter-flyway`) and the gateway artifact (`spring-cloud-starter-gateway-server-webflux`) |
 | 14 | HS256 shared-secret JWTs, validated at the gateway and again in every service | Simple to run locally (one secret from `JWT_SECRET`, no key server); defense in depth means a service reached directly still rejects forged or expired tokens | Every service holds the signing secret, so any compromised service could mint tokens; the upgrade path is RS256 with auth-service publishing a JWK set |
+| 15 | trade-service validates portfolio and instrument with a synchronous call to portfolio-service (through Eureka, forwarding the caller's token); holdings for the SELL check come from trade-service's own trades | A trade must be checked against current master data before it is accepted; trade-service already holds every trade, so the holding is exact without waiting for position-service | Trade capture depends on portfolio-service being up (503 `DEPENDENCY_UNAVAILABLE` otherwise; circuit breaker in Phase 6); master data is read per request rather than cached |
+| 16 | Business rule failures are stored as REJECTED trades (201 with a reason); malformed requests get 400 and are not stored | The blotter and audit trail show every attempted trade, as in real trade capture | Clients must check `status`, not just the HTTP code |
 
 ---
 

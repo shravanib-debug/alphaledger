@@ -15,7 +15,7 @@
 | 0 | Planning & Domain Setup | Docs, domain understanding, repo, tooling | ✅ |
 | 1 | Foundation & Infrastructure | Monorepo, Docker infra, Gateway, Eureka, Config | ✅ |
 | 2 | Auth & Portfolio Core | Login/JWT/RBAC, portfolios and instruments | ✅ |
-| 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ⬜ |
+| 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ✅ |
 | 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | ⬜ |
 | 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ⬜ |
 | 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ⬜ |
@@ -113,22 +113,22 @@
 
 **Goal:** Reliable trade creation with a proper lifecycle and event publication.
 
-- [ ] Trade entity (with `isin`, currency INR), `trade_audit`, and `outbox_event` tables
-- [ ] Create trade endpoint with full validation rules (FR-TR-2)
-- [ ] Default settle date = trade date + 1 business day (T+1) via a `BusinessDayCalendar` interface (weekends-only implementation here; the NSE holiday calendar plugs in during Phase 4A)
-- [ ] Trade status state machine (`NEW → VALIDATED → SETTLED`, `REJECTED`, `CANCELLED`)
-- [ ] Reject invalid transitions with clear errors
-- [ ] Idempotent create via `tradeRef`
-- [ ] Trade blotter endpoint with filters and pagination
-- [ ] Cancel trade endpoint
-- [ ] Manual settle endpoint
-- [ ] Scheduled auto-settlement job (settle date reached; runs on business days only)
-- [ ] Outbox relay publishing `trade.created`, `trade.settled`, `trade.cancelled` to Kafka
-- [ ] Define and document event schemas
-- [ ] Trade audit entries written on every status change
-- [ ] CSV bulk trade upload (P1)
-- [ ] **TDD:** unit tests for state machine and validation written first
-- [ ] Integration test with Testcontainers: create trade → message appears on Kafka
+- [x] Trade entity (with `isin`, currency INR), `trade_audit`, and `outbox_event` tables
+- [x] Create trade endpoint with full validation rules (FR-TR-2)
+- [x] Default settle date = trade date + 1 business day (T+1) via a `BusinessDayCalendar` interface (weekends-only implementation here; the NSE holiday calendar plugs in during Phase 4A)
+- [x] Trade status state machine (`NEW → VALIDATED → SETTLED`, `REJECTED`, `CANCELLED`)
+- [x] Reject invalid transitions with clear errors
+- [x] Idempotent create via `tradeRef`
+- [x] Trade blotter endpoint with filters and pagination
+- [x] Cancel trade endpoint
+- [x] Manual settle endpoint
+- [x] Scheduled auto-settlement job (settle date reached; runs on business days only)
+- [x] Outbox relay publishing `trade.created`, `trade.settled`, `trade.cancelled` to Kafka
+- [x] Define and document event schemas
+- [x] Trade audit entries written on every status change
+- [x] CSV bulk trade upload (P1)
+- [x] **TDD:** unit tests for state machine and validation written first
+- [x] Integration test with Testcontainers: create trade → message appears on Kafka
 
 **DoD:** Creating a trade through the gateway persists it, writes audit/outbox rows, and publishes an event visible in Kafka UI.
 
@@ -469,5 +469,6 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-15 | 0 | Phase 0 complete (DoD met: repo with docs on GitHub; `java -version` 21, `docker --version` 29, `node -v` 24). |
 | 2026-10-15 | 1 | Phase 1 complete. Spring Boot 4.0.8 + Spring Cloud 2025.1.3 (ADR 13), Maven Wrapper 3.9.16, 13 modules (`common`, 3 platform services, 8 business-service skeletons with Actuator, Flyway baseline, Eureka and config clients). `infra/docker-compose.yml`: Postgres 16 (8 DBs), Kafka 4.2 KRaft, Kafka UI, MailHog, Eureka, config server, gateway, portfolio-service. `./mvnw verify`: 34 tests green. `scripts/smoke-test.sh`: 8/8 checks pass (health, shared config, Eureka registration, gateway routing, correlation ID). |
 | 2026-10-15 | 2 | Phase 2 complete. auth-service: users/roles (`app_user`, `role`, `refresh_token`), BCrypt, HS256 access tokens (15 min) + rotating opaque refresh tokens (7 days, reuse revokes all), login/refresh/logout/me, Admin-only user management, 4 demo users (IDs 1-4). Gateway: JWT validation, spoof-proof `X-User-*` headers, JSON 401/403. portfolio-service: portfolios, funds, instruments (ISIN check-digit validation), PM-owns-portfolio rules, `@PreAuthorize`, instrument master `reference-data/instruments/instrument_master.csv` loaded with stable IDs 1-29 (pulled forward from Phase 4A), 3 demo portfolios with 7 funds. OpenAPI + Swagger UI on auth and portfolio. Postman collection in `docs/postman/`. `./mvnw verify`: 91 tests (incl. Testcontainers ITs) green; smoke test 22/22. ADR 14 (HS256 shared secret). |
+| 2026-10-15 | 3 | Phase 3 complete. trade-service: capture with validation (dates on business days, T+1 default via `BusinessDayCalendar`, weekends-only until 4A), portfolio/instrument checks via portfolio-service (ADR 15), SELL-above-holding check under a Postgres advisory lock, REJECTED trades stored with reasons (ADR 16), idempotent `tradeRef`, blotter, cancel (guards dependent SELLs), Admin manual settle, auto-settlement job (market time zone, SKIP LOCKED), `trade_audit` on every change, transactional outbox + relay to `trade.created`/`trade.settled`/`trade.cancelled`, CSV upload. Event schemas in `docs/events.md`. Tests: 28 unit + 9 Testcontainers ITs (Postgres + Kafka); smoke test 27/27. Fixed: Eureka client picking up the load-balanced RestClient builder. |
 | | | |
 | | | |

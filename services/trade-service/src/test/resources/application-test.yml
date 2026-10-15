@@ -1,0 +1,19 @@
+# Test profile: no config server or Eureka; Postgres and Kafka come from Testcontainers (@ServiceConnection).
+spring:
+  cloud:
+    config:
+      enabled: false
+eureka:
+  client:
+    enabled: false
+
+alphaledger:
+  security:
+    jwt:
+      secret: dGVzdC1vbmx5LXNlY3JldC10ZXN0LW9ubHktc2VjcmV0LTEyMzQ1Ng==
+  trade:
+    auto-settlement:
+      enabled: false   # tests call settleDueBatch directly
+  outbox:
+    relay:
+      poll-interval-ms: 200
