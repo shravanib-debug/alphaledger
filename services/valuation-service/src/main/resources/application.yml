@@ -18,6 +18,24 @@ spring:
   servlet:
     multipart:
       max-file-size: 2MB
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: valuation-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+  batch:
+    job:
+      enabled: false             # jobs run on schedule or on request, not at startup
+    jdbc:
+      initialize-schema: never   # Flyway creates the batch tables (V4)
 
 alphaledger:
   security:
@@ -25,6 +43,11 @@ alphaledger:
       secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
   market:
     zone: Asia/Kolkata
+  valuation:
+    eod-cron: "0 0 20 * * MON-FRI"   # after the 19:30 daily price run
+  outbox:
+    relay:
+      poll-interval-ms: 500
   marketdata:
     mode: ${MARKETDATA_MODE:OFFLINE}          # OFFLINE (local demo, tests, CI) | LIVE
     network-enabled: ${MARKETDATA_NETWORK_ENABLED:false}

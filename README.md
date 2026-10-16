@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-144%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-170%20passing-success)
 
 ---
 
@@ -37,9 +37,9 @@ match the custodian's.**
 | **Security** | Email/password login, short-lived JWT access tokens with rotating refresh tokens, four roles (Admin, Portfolio Manager, Operations Analyst, Auditor), checks at the gateway and again in every service | ✅ Built |
 | **Portfolios & instruments** | Portfolios split into funds by asset class (Private Equity, Credit, Real Estate); instruments keyed by **ISIN** with check-digit validation; a PM changes only the portfolios they manage | ✅ Built |
 | **Trade capture** | BUY/SELL trades in INR with **T+1 settlement on NSE business days**, a status lifecycle (NEW → VALIDATED → SETTLED, REJECTED, CANCELLED), a full audit trail, idempotent trade references, CSV bulk upload, automatic settlement | ✅ Built |
-| **Events** | Every trade change is published to **Kafka** through a transactional outbox (`trade.created`, `trade.settled`, `trade.cancelled`) | ✅ Built |
+| **Events** | Every change is published to **Kafka** through a transactional outbox: `trade.*`, `position.updated`, `price.updated`, `valuation.calculated`, `limit.breached`; consumers are idempotent | ✅ Built |
 | **Market data** | Pluggable price sources; **real NSE and AMFI closing prices** for listed instruments and mutual funds, synthetic Level 3 marks for private holdings; every price shows its source, date and whether it is stale | 🟨 Foundation built; live NSE/AMFI downloads later |
-| **Positions & valuation** | Holdings and weighted-average cost from trade events; market value, P&L and exposure by asset class; full NAV (cash and liabilities) in v1.5 | ⬜ Next |
+| **Positions & valuation** | Holdings and weighted-average cost rebuilt from trade events (exact cancels, realized P&L); live Market Value, unrealized P&L and exposure by asset class and instrument, every line with its price source; end-of-day snapshots and asset-class limits with breach alerts. Full NAV (cash and liabilities) in v1.5 | ✅ Built |
 | **Reconciliation** (signature feature) | Match a custodian file to settled trades on `trade ref + ISIN + trade date`; detect missing, quantity and price breaks; assign, resolve and escalate with an audit trail | ⬜ Planned |
 | **Notifications & resilience** | Alerts for breaks and limit breaches; retries, dead-letter topics, circuit breakers | ⬜ Planned |
 | **Analytics** | Warehouse-style star schema, data-quality checks, AUM and break-trend views | ⬜ Planned |
@@ -58,8 +58,8 @@ match the custodian's.**
 | 2 | Authentication, roles, portfolios, instruments | ✅ |
 | 3 | Trade capture, lifecycle, outbox, Kafka events | ✅ |
 | 4A | Market data: price sources, NSE holiday calendar, T+1 | 🟨 Foundation done; live adapters after Phase 5 |
-| 4 | Positions and valuation (market value, P&L, exposure) | ⬜ Next |
-| 4B | NAV extension (cash, liabilities) | ⬜ |
+| 4 | Positions and valuation (market value, P&L, exposure, limits) | ✅ |
+| 4B | NAV extension (cash, liabilities) | ⬜ Next |
 | 5 | Reconciliation engine | ⬜ |
 | 6 | Notifications and resilience | ⬜ |
 | 7 | Data engineering and analytics | ⬜ |
@@ -82,12 +82,15 @@ flowchart LR
     GW --> PF[portfolio-service]
     GW --> TR[trade-service]
     GW --> VAL[valuation-service]
-    GW --> POS[position-service<br/>Phase 4]
+    GW --> POS[position-service]
     GW --> REC[reconciliation-service<br/>Phase 5]
 
     TR -- validates via --> PF
     TR -- outbox relay --> K[(Kafka)]
-    K -- trade.created --> POS
+    K -- trade.created / cancelled --> POS
+    POS -- position.updated --> K
+    K -- position.updated --> VAL
+    VAL -- valuation.calculated / limit.breached --> K
     K -- trade.settled --> REC
     MD[NSE bhavcopy, AMFI NAVs,<br/>seed closes, synthetic marks] -.-> VAL
 
@@ -95,6 +98,7 @@ flowchart LR
     PF --- P[(portfolio_db)]
     TR --- T[(trade_db)]
     VAL --- V[(valuation_db)]
+    POS --- PO[(position_db)]
 
     EUR[Eureka registry] -.-> GW
     CFG[Config server] -.-> GW
@@ -108,8 +112,8 @@ flowchart LR
 | `auth-service` | 8081 | Users, roles, login, token refresh and revocation | ✅ |
 | `portfolio-service` | 8082 | Portfolios, funds, instrument master | ✅ |
 | `trade-service` | 8083 | Trade capture, validation, lifecycle, settlement, outbox | ✅ |
-| `valuation-service` | 8085 | Market data now; market value, P&L, NAV from Phase 4 | 🟨 |
-| `position-service` | 8084 | Holdings, average cost, realized P&L | Skeleton |
+| `valuation-service` | 8085 | Prices (source badges), Market Value, P&L, exposure, limits, end-of-day snapshots; NAV in v1.5 | ✅ |
+| `position-service` | 8084 | Holdings, weighted-average cost, realized P&L, daily snapshots | ✅ |
 | `reconciliation-service` | 8086 | Custodian file ingest, matching, breaks | Skeleton |
 | `notification-service` | 8087 | In-app and email notifications | Skeleton |
 | `analytics-service` | 8088 | Analytics ETL and reporting APIs | Skeleton |
@@ -117,7 +121,8 @@ flowchart LR
 **Reliability patterns already in place:** transactional outbox (a trade and its event commit together), at-least-once
 delivery with correlation IDs on every request and event, idempotent trade creation, database row locking
 (`FOR UPDATE SKIP LOCKED`) so several instances can relay events or settle trades safely, and a PostgreSQL advisory
-lock so two simultaneous SELLs cannot both pass the holding check.
+lock so two simultaneous SELLs cannot both pass the holding check. Daily position and valuation snapshots run as
+**Spring Batch** jobs (one recorded run per date).
 
 Full design: [docs/architecture.md](docs/architecture.md). Event formats: [docs/events.md](docs/events.md).
 
@@ -135,7 +140,8 @@ Full design: [docs/architecture.md](docs/architecture.md). Event formats: [docs/
 | API docs | springdoc-openapi (Swagger UI on every service) |
 | Testing | JUnit 5, AssertJ, Mockito, MockMvc, Testcontainers (real Postgres and Kafka) |
 | Build & run | Maven Wrapper (multi-module), Docker multi-stage builds, Docker Compose |
-| Planned | React 18 + TypeScript, Spring Batch, Prometheus/Grafana, GitHub Actions, SonarCloud |
+| Batch | Spring Batch 6 (end-of-day valuation and position snapshots) |
+| Planned | React 18 + TypeScript, Prometheus/Grafana, GitHub Actions, SonarCloud |
 
 ---
 
@@ -170,12 +176,13 @@ Requires **JDK 21** and **Docker Desktop**. Maven is not needed: the Maven Wrapp
 ```bash
 ./mvnw verify                                             # build all modules and run all tests
 docker compose -f infra/docker-compose.yml up -d --build  # start the stack (first build takes a few minutes)
-bash scripts/smoke-test.sh                                # 32 end-to-end checks through the gateway
+bash scripts/smoke-test.sh                                # 38 end-to-end checks through the gateway
+bash scripts/demo-trades.sh                               # optional: 20 demo trades at real 14-Oct-2026 closes
 docker compose -f infra/docker-compose.yml down           # stop (add -v to also delete the Postgres data)
 ```
 
 The stack runs fully offline. Settings (database password, JWT signing key, demo password) can be overridden by
-copying `infra/.env.example` to `infra/.env`. The full stack uses about 4 GB of memory.
+copying `infra/.env.example` to `infra/.env`. The full stack (12 containers) uses about 4.5 GB of memory.
 
 | URL | What |
 |---|---|
@@ -186,6 +193,7 @@ copying `infra/.env.example` to `infra/.env`. The full stack uses about 4 GB of 
 | http://localhost:8081/swagger-ui.html | auth-service API docs |
 | http://localhost:8082/swagger-ui.html | portfolio-service API docs |
 | http://localhost:8083/swagger-ui.html | trade-service API docs |
+| http://localhost:8084/swagger-ui.html | position-service API docs |
 | http://localhost:8085/swagger-ui.html | valuation-service API docs |
 
 ### Demo users
@@ -225,7 +233,15 @@ curl -s -X POST localhost:8080/api/v1/trades -H "Authorization: Bearer $TOKEN" -
 
 # 4. Its latest price, with source, data date and staleness
 curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/api/v1/marketdata/prices/latest?isin=INE041025011"
+
+# 5. A few seconds later (trade -> Kafka -> position -> Kafka -> valuation): holdings, Market Value and exposure
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/portfolios/2/positions
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/portfolios/2/valuation
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/portfolios/2/exposure
 ```
+
+The valuation is labelled **Market Value** with `valuationBasis: MARKET_VALUE_ONLY` and `nav: null`: true NAV needs
+cash and liabilities, which arrive in v1.5. Run `bash scripts/demo-trades.sh` to fill all three demo portfolios.
 
 Things worth trying:
 - **Rejection:** SELL more than you hold. The trade is stored as REJECTED with a reason.
@@ -241,11 +257,11 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 
 | Level | What | Tools |
 |---|---|---|
-| Unit | Trade state machine, T+1 and holiday rules, holding checks, token issuing and rotation, ISIN check digits, price validation and the synthetic-price rule | JUnit 5, AssertJ, Mockito |
-| Integration (`*IT`) | Each service's REST API end to end against real PostgreSQL (and Kafka for trade-service): migrations, security, idempotency, events on the topic | Spring Boot Test, MockMvc, Testcontainers |
-| Smoke | 32 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays | `scripts/smoke-test.sh` |
+| Unit | Trade state machine, T+1 and holiday rules, holding checks, position math (average cost, realized P&L, exact cancels), valuation and exposure (three hand-calculated scenarios), token issuing and rotation, ISIN check digits, price validation and the synthetic-price rule | JUnit 5, AssertJ, Mockito |
+| Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
+| Smoke | 38 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation | `scripts/smoke-test.sh` |
 
-Currently **144 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **170 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 
@@ -257,7 +273,7 @@ Currently **144 automated tests**, all passing (`./mvnw verify`; integration tes
 | `services/` | Spring Boot services: platform (`discovery-server`, `config-server`, `api-gateway`) and business services |
 | `reference-data/` | Committed reference data: instrument master (stable IDs), NSE holidays, synthetic marks, seed closes |
 | `infra/` | Docker Compose stack, shared service Dockerfile, Postgres init, `.env.example` |
-| `scripts/` | Smoke test |
+| `scripts/` | Smoke test, demo trade loader |
 | `docs/` | PRD, architecture, roadmap, events, conventions, Postman collection |
 | `frontend/` | React dashboard (Phase 8) |
 
@@ -274,6 +290,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | v1 reports **Market Value**; full **NAV** comes in v1.5 | NAV needs cash and liabilities; calling market value "NAV" would be wrong |
 | Real public prices, synthetic transactions | Credible valuations with real data, while trade and custodian data stays synthetic |
 | Rejected trades are stored, not just refused | The blotter and audit trail show every attempted trade, as in real trade capture |
+| Positions rebuilt from all their trades on every event | Cancels are exact even after later trades, and a duplicate event can never double-count |
 | Spring Boot 4 and Java 21 | The currently supported Spring line and Java LTS |
 | HS256 JWTs checked at the gateway and in every service | Simple to run locally, and a service reached directly still rejects forged tokens |
 
@@ -286,7 +303,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | [Product requirements](docs/prd.md) | Goals, personas, functional requirements, business rules, demo data plan |
 | [Architecture](docs/architecture.md) | Services, events, data pipelines, data model, APIs, security, ADRs |
 | [Roadmap](docs/roadmap.md) | Phase checklists, definitions of done, progress log |
-| [Event schemas](docs/events.md) | Kafka envelope and trade event payloads |
+| [Event schemas](docs/events.md) | Kafka envelope; trade, position, price, valuation and limit events |
 | [Conventions](docs/conventions.md) | Branching, commits, naming for packages, topics, endpoints, tables |
 
 ---

@@ -39,6 +39,8 @@ class GatewayRoutesTest {
             "/api/v1/portfolios/7/liabilities,            valuation-service",
             "/api/v1/portfolios/7/exposure,               valuation-service",
             "/api/v1/marketdata/ingestions,               valuation-service",
+            "/api/v1/valuations/limit-rules,              valuation-service",
+            "/api/v1/portfolios/7/positions/snapshots,    position-service",
             "/api/v1/trades/1001/cancel,                  trade-service",
             "/api/v1/recon/breaks,                        reconciliation-service",
             "/api/v1/notifications,                       notification-service",

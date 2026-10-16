@@ -15,6 +15,36 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: position-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+  batch:
+    job:
+      enabled: false          # jobs run on schedule, not at startup
+    jdbc:
+      initialize-schema: never   # Flyway creates the batch tables (V3)
+
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+  market:
+    zone: Asia/Kolkata
+  position:
+    snapshot-cron: "0 45 18 * * MON-FRI"
+  outbox:
+    relay:
+      poll-interval-ms: 500
 
 eureka:
   client:

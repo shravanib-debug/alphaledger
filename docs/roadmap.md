@@ -17,7 +17,7 @@
 | 2 | Auth & Portfolio Core | Login/JWT/RBAC, portfolios and instruments | ✅ |
 | 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ✅ |
 | 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | 🟨 |
-| 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ⬜ |
+| 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ✅ |
 | 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ⬜ |
 | 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ⬜ |
 | 6 | Notifications & Resilience | Notifications, DLQ, retries, circuit breakers | ⬜ |
@@ -189,29 +189,29 @@
 **Goal:** Turn trades into holdings and holdings into portfolio value.
 
 ### Position Service
-- [ ] Position entity, snapshot, and `processed_event` tables
-- [ ] Kafka consumer for `trade.created` and `trade.cancelled`
-- [ ] Weighted-average cost logic for BUY
-- [ ] Realized P&L logic for SELL
-- [ ] Reject/flag SELL beyond holdings
-- [ ] Idempotent processing (duplicate event ignored)
-- [ ] Publish `position.updated`
-- [ ] Positions query endpoint
-- [ ] Daily position snapshot job
-- [ ] **TDD:** unit tests covering buy, partial sell, full sell, duplicate event, cancel
-- [ ] Integration test: event in → position row correct
+- [x] Position entity, snapshot, and `processed_event` tables
+- [x] Kafka consumer for `trade.created` and `trade.cancelled`
+- [x] Weighted-average cost logic for BUY
+- [x] Realized P&L logic for SELL
+- [x] Reject/flag SELL beyond holdings
+- [x] Idempotent processing (duplicate event ignored)
+- [x] Publish `position.updated`
+- [x] Positions query endpoint
+- [x] Daily position snapshot job (Spring Batch)
+- [x] **TDD:** unit tests covering buy, partial sell, full sell, duplicate event, cancel
+- [x] Integration test: event in → position row correct
 
 ### Valuation Service
-- [ ] Price (with `source`, `data_date`), valuation snapshot (market value, with nullable NAV columns for Phase 4B), exposure snapshot, `limit_rule` tables
-- [ ] Scheduled price ingestion through the `PriceSource` (Phase 4A) publishing `price.updated`; `SyntheticPriceSource` for local intraday moves (`OFFLINE` mode only) instead of a standalone mock feed
-- [ ] CSV price upload endpoint
-- [ ] Consume `position.updated` and `price.updated`
-- [ ] Calculate portfolio market value and unrealized P&L (label it "Market Value", not NAV)
-- [ ] Exposure by asset class and instrument
-- [ ] End-of-day valuation snapshot Spring Batch job (`valuation_basis = MARKET_VALUE_ONLY`)
-- [ ] Valuation and valuation-history endpoints
-- [ ] Limit rules and `limit.breached` event (P1)
-- [ ] Unit and integration tests
+- [x] Price (with `source`, `data_date`), valuation snapshot (market value, with nullable NAV columns for Phase 4B), exposure snapshot, `limit_rule` tables
+- [x] Scheduled price ingestion through the `PriceSource` (Phase 4A) publishing `price.updated`; `SyntheticPriceSource` for local intraday moves (`OFFLINE` mode only) instead of a standalone mock feed
+- [x] CSV price upload endpoint
+- [x] Consume `position.updated` (prices are read from valuation-service's own price table at valuation time, so it does not consume its own `price.updated`; that topic is for other consumers)
+- [x] Calculate portfolio market value and unrealized P&L (label it "Market Value", not NAV)
+- [x] Exposure by asset class and instrument
+- [x] End-of-day valuation snapshot Spring Batch job (`valuation_basis = MARKET_VALUE_ONLY`)
+- [x] Valuation and valuation-history endpoints
+- [x] Limit rules and `limit.breached` event (P1)
+- [x] Unit and integration tests
 
 **DoD:** Create trades → positions update → market value and exposure reflect them; numbers verified manually against a spreadsheet for at least 3 scenarios.
 
@@ -471,5 +471,6 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-15 | 2 | Phase 2 complete. auth-service: users/roles (`app_user`, `role`, `refresh_token`), BCrypt, HS256 access tokens (15 min) + rotating opaque refresh tokens (7 days, reuse revokes all), login/refresh/logout/me, Admin-only user management, 4 demo users (IDs 1-4). Gateway: JWT validation, spoof-proof `X-User-*` headers, JSON 401/403. portfolio-service: portfolios, funds, instruments (ISIN check-digit validation), PM-owns-portfolio rules, `@PreAuthorize`, instrument master `reference-data/instruments/instrument_master.csv` loaded with stable IDs 1-29 (pulled forward from Phase 4A), 3 demo portfolios with 7 funds. OpenAPI + Swagger UI on auth and portfolio. Postman collection in `docs/postman/`. `./mvnw verify`: 91 tests (incl. Testcontainers ITs) green; smoke test 22/22. ADR 14 (HS256 shared secret). |
 | 2026-10-15 | 3 | Phase 3 complete. trade-service: capture with validation (dates on business days, T+1 default via `BusinessDayCalendar`, weekends-only until 4A), portfolio/instrument checks via portfolio-service (ADR 15), SELL-above-holding check under a Postgres advisory lock, REJECTED trades stored with reasons (ADR 16), idempotent `tradeRef`, blotter, cancel (guards dependent SELLs), Admin manual settle, auto-settlement job (market time zone, SKIP LOCKED), `trade_audit` on every change, transactional outbox + relay to `trade.created`/`trade.settled`/`trade.cancelled`, CSV upload. Event schemas in `docs/events.md`. Tests: 28 unit + 9 Testcontainers ITs (Postgres + Kafka); smoke test 27/27. Fixed: Eureka client picking up the load-balanced RestClient builder. |
 | 2026-10-15 | 4A | Phase 4A foundation done (rest deferred until after Phase 5, ADR 17). NSE CM 2026 holiday calendar committed and loaded into trade_db and valuation_db; T+1 now skips NSE holidays (19-Oct trade settles 21-Oct, Dussehra). valuation-service: `PriceSource` interface + registry (startup fails if SYNTHETIC is configured for a real instrument type), `SyntheticPriceSource` (L3 quarterly marks; OFFLINE-only intraday ticks, off by default), CSV price upload with declared provenance, real seed closes for all 26 instruments (14-Oct-2026, from NSE bhavcopy and AMFI NAVAll), price table with source/data_date and partial unique indexes, ingestion log with checksum idempotency and rejected rows, latest price with source badge and staleness. Reference data packaged in the common jar. Tests: common 34, valuation 10 unit + 6 ITs; smoke test 32/32. |
+| 2026-10-16 | 4 | Phase 4 complete. position-service: positions rebuilt from applied trades on every `trade.created`/`trade.cancelled` (weighted-average cost, realized P&L, exact cancels, trade-date order, SELL above holding skipped and recorded), idempotent consumer (`processed_event`), `position.updated` via outbox, positions/snapshots/exceptions endpoints, daily snapshot as a Spring Batch job. valuation-service: holdings copy from `position.updated` (newer update wins), live Market Value, unrealized/realized P&L and exposure by asset class and instrument with each line's price source/date/staleness, unpriced holdings reported not zero-valued, end-of-day Spring Batch job writing immutable `valuation_snapshot` + `exposure_snapshot` (basis MARKET_VALUE_ONLY, nav NULL), `valuation.calculated`, limit rules (portfolio overrides global) and once-per-day `limit.breached`, `price.updated` published on ingestion. Outbox/consumer helpers moved to common. DoD: three hand-calculated scenarios as unit tests; `scripts/demo-trades.sh` books 20 real-price trades. Smoke test 38/38. |
 | | | |
 | | | |

@@ -159,6 +159,39 @@ expect_status "PM cannot upload prices (403)"   403 -X POST -H "Authorization: B
     -F "file=@$upload_file;filename=prices.csv" "$GATEWAY/api/v1/marketdata/prices/upload"
 rm -f "$upload_file"
 
+# ---------- Phase 4: positions and valuation (event chain trade -> position -> valuation) ----------
+check "position-service registered"           "$EUREKA/eureka/apps/POSITION-SERVICE" '"POSITION-SERVICE"'
+
+# The smoke trade above (500 Embassy REIT in portfolio 2) must reach positions and then valuation via Kafka.
+await_json() {
+    local name=$1 url=$2 expect=$3
+    local deadline=$((SECONDS + TIMEOUT_SECONDS)) body=""
+    while (( SECONDS < deadline )); do
+        body=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$url" 2>/dev/null || true)
+        if [[ "$body" == *"$expect"* ]]; then
+            echo "PASS  $name"
+            return 0
+        fi
+        sleep 3
+    done
+    echo "FAIL  $name ($url did not contain '$expect')"
+    failures=$((failures + 1))
+}
+await_json "trade became a position (Kafka -> position-service)" \
+    "$GATEWAY/api/v1/portfolios/2/positions" '"isin":"INE041025011"'
+await_json "position reached valuation (Kafka -> valuation-service)" \
+    "$GATEWAY/api/v1/portfolios/2/valuation" '"priceSource":"NSE_BHAVCOPY"'
+valuation=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/portfolios/2/valuation")
+if [[ "$valuation" == *'"valuationBasis":"MARKET_VALUE_ONLY"'* && "$valuation" == *'"nav":null'* ]]; then
+    echo "PASS  valuation labelled Market Value, not NAV"
+else
+    echo "FAIL  valuation labelled Market Value, not NAV"; failures=$((failures + 1))
+fi
+expect_status "exposure by asset class (200)"   200 -H "Authorization: Bearer $AUDITOR_TOKEN" \
+    "$GATEWAY/api/v1/portfolios/2/exposure"
+expect_status "PM cannot set limit rules (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN" \
+    -H 'Content-Type: application/json' -d '{"assetClass":"CREDIT","maxPct":50}' "$GATEWAY/api/v1/valuations/limit-rules"
+
 if (( failures > 0 )); then
     echo "$failures check(s) failed"
     exit 1

@@ -314,13 +314,13 @@ alphaledger:
 
 ### 5.4 Pipeline 3: Valuation & NAV pipeline
 - **Type:** Hybrid: event-triggered (intraday) + scheduled batch (end-of-day official valuation).
-- **Intraday:** on `position.updated` or `price.updated`, recompute the affected portfolio's market value and cache it.
+- **Intraday:** `position.updated` keeps valuation-service's copy of holdings current; the valuation endpoints compute market value live from those holdings and the latest prices on each request (cheap at this scale, always current, nothing to invalidate).
 - **End-of-day (Spring Batch job, runs after that business day's price ingestion completes; 18:00 daily in `OFFLINE` mode):**
   1. Read all positions.
   2. Join with closing prices.
   3. Compute market value, unrealized P&L, exposure by asset class.
   4. **(v1.5)** Read `cash_balance` and open `liability` rows; compute `NAV = market value + cash − liabilities`.
-  5. Write immutable `valuation_snapshot` (with components and `valuation_basis`) and `pnl_snapshot`.
+  5. Write immutable `valuation_snapshot` (with components, P&L and `valuation_basis`) and `exposure_snapshot`; one run per date (Spring Batch job `valuationSnapshotJob`).
   6. Publish `valuation.calculated`.
 - **Limit check:** compare exposure % against `limit_rule`; publish `limit.breached` when over threshold.
 
@@ -516,10 +516,15 @@ outbox_event(id UUID, aggregate_type, aggregate_id, event_type, topic, message_k
 
 ### 6.4 `position_db`
 ```
-position(id, portfolio_id, instrument_id, quantity, avg_cost, realized_pnl, updated_at,
+applied_trade(trade_id PK, trade_ref, portfolio_id, instrument_id, isin, side, quantity, price, trade_date,
+              cancelled, received_at)            -- every trade received; positions are rebuilt from these (ADR 18)
+position(id, portfolio_id, instrument_id, isin, quantity, avg_cost, realized_pnl, last_trade_id, updated_at,
          UNIQUE(portfolio_id, instrument_id))
-position_snapshot(id, portfolio_id, instrument_id, snapshot_date, quantity, avg_cost)
+position_snapshot(id, portfolio_id, instrument_id, isin, snapshot_date, quantity, avg_cost, realized_pnl,
+                  UNIQUE(portfolio_id, instrument_id, snapshot_date))
+position_exception(id, trade_id, portfolio_id, instrument_id, reason, created_at)   -- e.g. SELL above holding, not applied
 processed_event(event_id PK, processed_at)
+holiday_calendar(...), outbox_event(...), BATCH_* (Spring Batch job repository)
 ```
 
 ### 6.5 `valuation_db`
@@ -538,13 +543,21 @@ price_ingestion_log(id, source, data_date, file_name, file_checksum, rows_read, 
                     -- UNIQUE(source, file_checksum) WHERE status IN ('SUCCESS','PARTIAL'): a file loads once; repeats are logged
                     -- status: RUNNING | SUCCESS | PARTIAL | FAILED | SKIPPED_DUPLICATE
 price_ingestion_error(id, ingestion_id FK, row_number, isin, reason, raw_row)
-valuation_snapshot(id, portfolio_id, as_of_date, market_value, cash_balance DEFAULT 0, total_liabilities DEFAULT 0,
-                   nav NULL until v1.5, valuation_basis, total_cost, unrealized_pnl, realized_pnl)
+position_view(portfolio_id, instrument_id, isin, quantity, avg_cost, realized_pnl, last_trade_id, updated_at,
+              PRIMARY KEY(portfolio_id, instrument_id))   -- copy of holdings from position.updated (newer update wins)
+valuation_snapshot(id, portfolio_id, as_of_date, market_value, total_cost, unrealized_pnl, realized_pnl,
+                   cash_balance DEFAULT 0, total_liabilities DEFAULT 0, nav NULL until v1.5, valuation_basis,
+                   priced_positions, stale_positions, unpriced_positions, created_at,
+                   UNIQUE(portfolio_id, as_of_date))      -- immutable; P&L lives here (no separate pnl_snapshot)
 cash_balance(id, portfolio_id, currency, balance, updated_at, UNIQUE(portfolio_id, currency))   -- v1.5
 cash_transaction(id, portfolio_id, type, amount, reference_id, occurred_at)                      -- v1.5, append-only
 liability(id, portfolio_id, type, description, amount, accrual_date, status)                     -- v1.5
-exposure_snapshot(id, portfolio_id, as_of_date, asset_class, market_value, pct_of_nav)
-limit_rule(id, portfolio_id, asset_class, max_pct)
+exposure_snapshot(id, portfolio_id, as_of_date, asset_class, market_value, pct_of_total)   -- share of market value
+limit_rule(id, portfolio_id NULL, asset_class, max_pct, UNIQUE NULLS NOT DISTINCT(portfolio_id, asset_class))
+                                                           -- portfolio_id NULL = all portfolios; a portfolio rule overrides it
+limit_breach(id, portfolio_id, asset_class, as_of_date, exposure_pct, max_pct, market_value, created_at,
+             UNIQUE(portfolio_id, asset_class, as_of_date))   -- limit.breached published once per day
+outbox_event(...), BATCH_* (Spring Batch job repository)
 processed_event(event_id PK, processed_at)
 ```
 
@@ -604,12 +617,16 @@ dq_check_result(id, check_name, run_at, status, details)
 | Trade | `GET /api/v1/trades/{id}`, `GET /api/v1/trades/{id}/audit` | Trade and its status history |
 | Trade | `POST /api/v1/trades/{id}/cancel` | Cancel trade (Admin, or the managing PM) |
 | Trade | `POST /api/v1/trades/{id}/settle` | Manual settle (Admin) |
-| Position | `GET /api/v1/portfolios/{id}/positions` | Current holdings |
+| Position | `GET /api/v1/portfolios/{id}/positions?includeClosed=` | Current holdings |
+| Position | `GET /api/v1/portfolios/{id}/positions/snapshots?date=`, `.../positions/exceptions` | Daily snapshot; trades that could not be applied |
 | Valuation | `GET /api/v1/portfolios/{id}/valuation` | Current market value (and NAV once v1.5 ships) |
 | Valuation | `GET /api/v1/portfolios/{id}/valuation/history` | Valuation time series |
 | Valuation | `GET/POST /api/v1/portfolios/{id}/cash` | Cash balance and deposit/withdrawal entries (v1.5) |
 | Valuation | `GET/POST /api/v1/portfolios/{id}/liabilities` | Liabilities and accruals (v1.5) |
-| Valuation | `GET /api/v1/portfolios/{id}/exposure` | Exposure by asset class |
+| Valuation | `GET /api/v1/portfolios/{id}/exposure?asOf=` | Exposure by asset class and instrument |
+| Valuation | `GET/POST /api/v1/valuations/limit-rules`, `DELETE .../limit-rules/{id}` (Admin to change) | Asset-class limits |
+| Valuation | `GET /api/v1/valuations/limit-breaches?portfolioId=` | Recorded breaches |
+| Valuation | `POST /api/v1/valuations/eod-runs?date=` (Admin) | Run the end-of-day valuation job for a date |
 | Valuation | `POST /api/v1/marketdata/ingestions` (Admin) | Run one source, or the daily fallback run, for a data date (range backfill comes with the adapters) |
 | Valuation | `GET /api/v1/marketdata/ingestions?source=&limit=`, `GET /api/v1/marketdata/ingestions/{id}/errors` | Price ingestion log and its rejected rows |
 | Valuation | `GET /api/v1/marketdata/prices/latest?isin=&instrumentId=&asOf=` | Latest price(s) with source badge, data date and staleness |
@@ -805,6 +822,8 @@ alphaledger/
 | 15 | trade-service validates portfolio and instrument with a synchronous call to portfolio-service (through Eureka, forwarding the caller's token); holdings for the SELL check come from trade-service's own trades | A trade must be checked against current master data before it is accepted; trade-service already holds every trade, so the holding is exact without waiting for position-service | Trade capture depends on portfolio-service being up (503 `DEPENDENCY_UNAVAILABLE` otherwise; circuit breaker in Phase 6); master data is read per request rather than cached |
 | 16 | Business rule failures are stored as REJECTED trades (201 with a reason); malformed requests get 400 and are not stored | The blotter and audit trail show every attempted trade, as in real trade capture | Clients must check `status`, not just the HTTP code |
 | 17 | Build the market-data foundation (PriceSource, synthetic marks, CSV upload, real seed closes, NSE holidays) now; defer the live NSE/AMFI/mfapi adapters until after reconciliation (Phase 5) | Gets the end-to-end flow (trade → position → value → reconciliation) working first while still using real prices (a committed seed of real closes); the adapters are the riskiest work (external formats, throttling, terms) and slot in behind the same interface | Prices stay at the seed date until the adapters land (shown as stale with their data date); manual CSV upload is the stop-gap for fresher prices |
+| 18 | position-service rebuilds a holding from all its applied trades on every event (instead of adding and subtracting) | Cancels are reversed exactly even after later trades, back-dated trades land in trade-date order, and a redelivered event cannot double-count | Re-reads a holding's trades per event (cheap at this scale; snapshots or periodic compaction would be needed for very long histories) |
+| 19 | Live valuation computed on request; end-of-day snapshots stored by Spring Batch | Always reflects the latest positions and prices with no cache to invalidate; batch gives one recorded, non-repeatable run per date | Each valuation request reads prices per holding; a cache can be added if portfolios grow large |
 
 ---
 

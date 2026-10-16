@@ -21,7 +21,15 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import tools.jackson.databind.json.JsonMapper;
+
 import com.alphaledger.common.calendar.BusinessDayCalendar;
+import com.alphaledger.common.outbox.OutboxRelay;
+import com.alphaledger.common.outbox.OutboxWriter;
 import com.alphaledger.common.calendar.JdbcHolidayCalendarLoader;
 import com.alphaledger.common.calendar.MarketClock;
 import com.alphaledger.common.web.CorrelationId;
@@ -40,6 +48,19 @@ public class TradeConfig {
     @Bean
     public MarketClock marketClock(Clock clock, @Value("${alphaledger.market.zone:Asia/Kolkata}") ZoneId zone) {
         return new MarketClock(clock, zone);
+    }
+
+    @Bean
+    public OutboxWriter outboxWriter(JdbcTemplate jdbc, JsonMapper jsonMapper, Clock clock,
+                                     @Value("${spring.application.name}") String producer) {
+        return new OutboxWriter(jdbc, jsonMapper, clock, producer);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "alphaledger.outbox.relay.enabled", havingValue = "true", matchIfMissing = true)
+    public OutboxRelay outboxRelay(JdbcTemplate jdbc, KafkaTemplate<String, String> kafka, JsonMapper jsonMapper,
+                                   Clock clock, PlatformTransactionManager transactionManager) {
+        return new OutboxRelay(jdbc, kafka, jsonMapper, clock, transactionManager);
     }
 
     /** Weekends plus NSE trading holidays, loaded from the committed holiday files into holiday_calendar. */

@@ -14,12 +14,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.alphaledger.common.calendar.BusinessDayCalendar;
 import com.alphaledger.common.calendar.MarketClock;
+import com.alphaledger.common.event.EventTypes;
+import com.alphaledger.common.event.PriceEvent;
+import com.alphaledger.common.event.Topics;
+import com.alphaledger.common.outbox.OutboxWriter;
 import com.alphaledger.valuation.marketdata.PriceBatch.PriceRecord;
 import com.alphaledger.valuation.marketdata.PriceBatch.RejectedRow;
 
 /**
  * Price ingestion pipeline (architecture.md §5.3): checksum check → validate → dedupe/upsert → log.
- * Publishing {@code price.updated} is added with the valuation consumer in Phase 4.
+ * Every loaded price is also published as {@code price.updated} (through the outbox, keyed by instrument).
  */
 @Service
 public class PriceIngestionService {
@@ -31,11 +35,13 @@ public class PriceIngestionService {
     private final BusinessDayCalendar calendar;
     private final MarketClock clock;
     private final boolean offline;
+    private final OutboxWriter outbox;
     private final TransactionTemplate transaction;
 
     public PriceIngestionService(MarketDataRepository repository, PriceSourceRegistry registry,
                                  BusinessDayCalendar calendar, MarketClock clock, MarketDataProperties properties,
-                                 PlatformTransactionManager transactionManager) {
+                                 OutboxWriter outbox, PlatformTransactionManager transactionManager) {
+        this.outbox = outbox;
         this.repository = repository;
         this.registry = registry;
         this.calendar = calendar;
@@ -125,6 +131,10 @@ public class PriceIngestionService {
                 continue;
             }
             repository.upsertPrice(record, instrument, id);
+            outbox.append("Price", String.valueOf(instrument.instrumentId()), EventTypes.PRICE_UPDATED,
+                    Topics.PRICE_UPDATED, String.valueOf(instrument.instrumentId()),
+                    new PriceEvent(instrument.instrumentId(), instrument.isin(), record.price(), "INR",
+                            record.dataDate(), record.asOf(), record.source().name()));
             loaded++;
         }
         repository.insertErrors(id, rejected);

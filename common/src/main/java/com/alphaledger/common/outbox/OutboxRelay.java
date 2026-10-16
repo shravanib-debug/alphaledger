@@ -1,4 +1,4 @@
-package com.alphaledger.trade.outbox;
+package com.alphaledger.common.outbox;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -10,11 +10,9 @@ import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -26,10 +24,9 @@ import com.alphaledger.common.event.EventTypes;
 /**
  * Publishes pending outbox rows to Kafka in creation order (at-least-once). Rows are claimed with
  * {@code FOR UPDATE SKIP LOCKED}, so several instances can run safely. On the first failure the batch stops,
- * keeping per-portfolio ordering; the row is retried on the next poll.
+ * keeping per-portfolio ordering; the row is retried on the next poll. Each producing service registers one as a
+ * bean (the service must enable scheduling).
  */
-@Component
-@ConditionalOnProperty(name = "alphaledger.outbox.relay.enabled", havingValue = "true", matchIfMissing = true)
 public class OutboxRelay {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);

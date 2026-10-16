@@ -581,6 +581,103 @@
           }
         }
       ]
+    },
+    {
+      "name": "Positions",
+      "item": [
+        {
+          "name": "Positions: Bharat Real Assets (portfolio 2)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/portfolios/2/positions"
+          }
+        },
+        {
+          "name": "Positions incl. closed",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/portfolios/3/positions?includeClosed=true"
+          }
+        },
+        {
+          "name": "Position snapshot for a date",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/portfolios/2/positions/snapshots?date=2026-10-15"
+          }
+        },
+        {
+          "name": "Position exceptions",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/portfolios/2/positions/exceptions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Valuation",
+      "item": [
+        {
+          "name": "Valuation (Market Value, P&L, price badges)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/portfolios/2/valuation"
+          }
+        },
+        {
+          "name": "Exposure by asset class and instrument",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/portfolios/3/exposure"
+          }
+        },
+        {
+          "name": "Valuation history (EOD snapshots)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/portfolios/2/valuation/history"
+          }
+        },
+        {
+          "name": "Limit rules",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/valuations/limit-rules"
+          }
+        },
+        {
+          "name": "Set limit rule (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/valuations/limit-rules",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"portfolioId\": 3,\n  \"assetClass\": \"PRIVATE_EQUITY\",\n  \"maxPct\": 60\n}"
+            }
+          }
+        },
+        {
+          "name": "Run end-of-day valuation (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/valuations/eod-runs"
+          }
+        },
+        {
+          "name": "Limit breaches",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/valuations/limit-breaches"
+          }
+        }
+      ]
     }
   ]
 }

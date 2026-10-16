@@ -105,7 +105,7 @@ class PriceRulesTest {
         MarketDataProperties properties = new MarketDataProperties(mode, false, 5, Map.of(), true, false);
         return new PriceIngestionService(mock(MarketDataRepository.class),
                 new PriceSourceRegistry(List.of(), properties), CALENDAR, CLOCK, properties,
-                mock(PlatformTransactionManager.class));
+                mock(com.alphaledger.common.outbox.OutboxWriter.class), mock(PlatformTransactionManager.class));
     }
 
     private static MarketDataProperties properties(Map<String, List<PriceSourceName>> order) {

@@ -71,4 +71,31 @@ Example (`trade.created`, key `"2"`):
 }
 ```
 
-Consumers (from Phase 4): position-service (`trade.created`, `trade.cancelled`), reconciliation-service (`trade.settled`), valuation-service (`trade.settled`, v1.5 cash).
+Consumers: position-service (`trade.created`, `trade.cancelled`); from Phase 5 reconciliation-service (`trade.settled`); in v1.5 valuation-service (`trade.settled`, cash).
+
+## Position events (producer: position-service)
+
+`position.updated` / `POSITION_UPDATED`, keyed by `portfolioId`. Emitted after every applied trade event. The payload is
+the **full state** of one holding, so consumers replace their copy rather than apply a delta (a closed position has
+quantity 0).
+
+| Field | Type | Notes |
+|---|---|---|
+| `portfolioId`, `instrumentId`, `isin` | long, long, string | |
+| `quantity` | decimal | Units held after the change. |
+| `avgCost` | decimal | Weighted-average cost (6 decimal places); 0 when closed. |
+| `realizedPnl` | decimal | Cumulative realized P&L in INR. |
+| `lastTradeId` | long | Latest trade applied to this holding. |
+| `updatedAt` | instant | Consumers ignore an update older than the one they hold. |
+
+Consumer: valuation-service.
+
+## Valuation events (producer: valuation-service)
+
+| Topic | `eventType` | Key | Emitted when | Payload |
+|---|---|---|---|---|
+| `price.updated` | `PRICE_UPDATED` | `instrumentId` | A price is loaded (seed, upload, synthetic marks or ticks, daily run) | `instrumentId`, `isin`, `price`, `currency`, `dataDate`, `asOf`, `source` |
+| `valuation.calculated` | `VALUATION_CALCULATED` | `portfolioId` | The end-of-day run writes a portfolio's snapshot | `portfolioId`, `asOfDate`, `marketValue`, `totalCost`, `unrealizedPnl`, `realizedPnl`, `nav` (null in v1), `valuationBasis` (`MARKET_VALUE_ONLY`), `stalePositions` |
+| `limit.breached` | `LIMIT_BREACHED` | `portfolioId` | An asset class's share of market value exceeds its limit (once per portfolio, asset class and day) | `portfolioId`, `assetClass`, `exposurePct`, `maxPct`, `marketValue`, `asOfDate` |
+
+Consumers (planned): notification-service (`limit.breached`, Phase 6), analytics (`valuation.calculated`, Phase 7).

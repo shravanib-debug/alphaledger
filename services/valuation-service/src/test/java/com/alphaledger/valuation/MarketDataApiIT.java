@@ -26,6 +26,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import com.jayway.jsonpath.JsonPath;
@@ -47,6 +48,10 @@ class MarketDataApiIT {
     @Container
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16.15");
+
+    @Container
+    @ServiceConnection
+    static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.2.2");
 
     @TestConfiguration
     static class FixedClock {

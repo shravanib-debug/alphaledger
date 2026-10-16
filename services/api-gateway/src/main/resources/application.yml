@@ -32,7 +32,7 @@ spring:
             - id: valuation-service
               uri: lb://valuation-service
               predicates:
-                - Path=/api/v1/portfolios/*/valuation/**,/api/v1/portfolios/*/cash/**,/api/v1/portfolios/*/liabilities/**,/api/v1/portfolios/*/exposure/**,/api/v1/marketdata/**
+                - Path=/api/v1/portfolios/*/valuation/**,/api/v1/portfolios/*/cash/**,/api/v1/portfolios/*/liabilities/**,/api/v1/portfolios/*/exposure/**,/api/v1/marketdata/**,/api/v1/valuations/**
             - id: portfolio-service
               uri: lb://portfolio-service
               predicates:

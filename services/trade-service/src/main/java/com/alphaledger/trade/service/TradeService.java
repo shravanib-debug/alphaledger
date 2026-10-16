@@ -36,7 +36,7 @@ import com.alphaledger.trade.domain.TradeStatus;
 import com.alphaledger.trade.dto.CreateTradeRequest;
 import com.alphaledger.trade.dto.TradeAuditResponse;
 import com.alphaledger.trade.dto.TradeResponse;
-import com.alphaledger.trade.outbox.OutboxWriter;
+import com.alphaledger.common.outbox.OutboxWriter;
 import com.alphaledger.trade.repository.TradeAuditRepository;
 import com.alphaledger.trade.repository.TradeRepository;
 
