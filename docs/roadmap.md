@@ -19,7 +19,7 @@
 | 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | 🟨 |
 | 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ✅ |
 | 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ⬜ |
-| 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ⬜ |
+| 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ✅ |
 | 6 | Notifications & Resilience | Notifications, DLQ, retries, circuit breakers | ⬜ |
 | 7 | Data Engineering & Analytics | Analytics ETL, star schema, DQ checks, views | ⬜ |
 | 8 | Frontend (React) | Dashboard, blotter, positions, recon UI | ⬜ |
@@ -243,35 +243,35 @@
 **Goal:** The signature feature: ingest, match, detect, and manage breaks.
 
 ### Data and ingestion
-- [ ] Reconciliation tables (`recon_run`, `custodian_record`, errors, `recon_break`, audit)
-- [ ] Consume `trade.settled` into `settled_trade_view`
-- [ ] Write `generate-custodian-file.py` creating a CSV (instruments by ISIN) with injected breaks
-- [ ] File upload endpoint (multipart) with checksum duplicate protection
-- [ ] Spring Batch job: reader → validator → staging writer
-- [ ] Invalid rows captured in `custodian_record_error`
+- [x] Reconciliation tables (`recon_run`, `custodian_record`, errors, `recon_break`, audit)
+- [x] Consume `trade.settled` into `settled_trade_view`
+- [x] Write `generate-custodian-file.py` creating a CSV (instruments by ISIN) with injected breaks
+- [x] File upload endpoint (multipart) with checksum duplicate protection
+- [x] Spring Batch job: reader → validator → staging writer
+- [x] Invalid rows captured in `custodian_record_error`
 
 ### Matching engine
-- [ ] Define match key (`trade_ref + instrument + trade_date`, instrument keyed by ISIN)
-- [ ] Implement exact quantity comparison
-- [ ] Implement price comparison with configurable tolerance
-- [ ] Detect `MISSING_INTERNAL`
-- [ ] Detect `MISSING_EXTERNAL`
-- [ ] Detect `QTY_MISMATCH`
-- [ ] Detect `PRICE_MISMATCH`
-- [ ] Run summary (total, matched, per-type break counts, match rate)
-- [ ] **TDD:** unit tests for every break type and boundary tolerance cases
-- [ ] Idempotency: re-running the same file creates no duplicates
-- [ ] Performance test: 10,000 rows in under 30 seconds
+- [x] Define match key (`trade_ref + instrument + trade_date`, instrument keyed by ISIN)
+- [x] Implement exact quantity comparison
+- [x] Implement price comparison with configurable tolerance
+- [x] Detect `MISSING_INTERNAL`
+- [x] Detect `MISSING_EXTERNAL`
+- [x] Detect `QTY_MISMATCH`
+- [x] Detect `PRICE_MISMATCH`
+- [x] Run summary (total, matched, per-type break counts, match rate)
+- [x] **TDD:** unit tests for every break type and boundary tolerance cases
+- [x] Idempotency: re-running the same file creates no duplicates
+- [x] Performance test: 10,000 rows in under 30 seconds
 
 ### Break workflow
-- [ ] Break list endpoint with filters (status, type, run, age)
-- [ ] Assign break to analyst
-- [ ] Status transitions `OPEN → IN_REVIEW → RESOLVED / ESCALATED`
-- [ ] Resolution actions (accept external, adjust internal, known difference, escalate) with mandatory comment
-- [ ] Immutable `break_action_audit` entries
-- [ ] Publish `recon.break.created` and `recon.break.resolved` via outbox
-- [ ] Break ageing calculation (P1)
-- [ ] Integration tests end-to-end (upload file → breaks created → resolve)
+- [x] Break list endpoint with filters (status, type, run, age)
+- [x] Assign break to analyst
+- [x] Status transitions `OPEN → IN_REVIEW → RESOLVED / ESCALATED`
+- [x] Resolution actions (accept external, adjust internal, known difference, escalate) with mandatory comment
+- [x] Immutable `break_action_audit` entries
+- [x] Publish `recon.break.created` and `recon.break.resolved` via outbox
+- [x] Break ageing calculation (P1)
+- [x] Integration tests end-to-end (upload file → breaks created → resolve)
 
 **DoD:** Uploading the seeded custodian file produces exactly the injected breaks (3/3/4/4); each can be assigned and resolved with a full audit trail.
 
@@ -472,5 +472,5 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-15 | 3 | Phase 3 complete. trade-service: capture with validation (dates on business days, T+1 default via `BusinessDayCalendar`, weekends-only until 4A), portfolio/instrument checks via portfolio-service (ADR 15), SELL-above-holding check under a Postgres advisory lock, REJECTED trades stored with reasons (ADR 16), idempotent `tradeRef`, blotter, cancel (guards dependent SELLs), Admin manual settle, auto-settlement job (market time zone, SKIP LOCKED), `trade_audit` on every change, transactional outbox + relay to `trade.created`/`trade.settled`/`trade.cancelled`, CSV upload. Event schemas in `docs/events.md`. Tests: 28 unit + 9 Testcontainers ITs (Postgres + Kafka); smoke test 27/27. Fixed: Eureka client picking up the load-balanced RestClient builder. |
 | 2026-10-15 | 4A | Phase 4A foundation done (rest deferred until after Phase 5, ADR 17). NSE CM 2026 holiday calendar committed and loaded into trade_db and valuation_db; T+1 now skips NSE holidays (19-Oct trade settles 21-Oct, Dussehra). valuation-service: `PriceSource` interface + registry (startup fails if SYNTHETIC is configured for a real instrument type), `SyntheticPriceSource` (L3 quarterly marks; OFFLINE-only intraday ticks, off by default), CSV price upload with declared provenance, real seed closes for all 26 instruments (14-Oct-2026, from NSE bhavcopy and AMFI NAVAll), price table with source/data_date and partial unique indexes, ingestion log with checksum idempotency and rejected rows, latest price with source badge and staleness. Reference data packaged in the common jar. Tests: common 34, valuation 10 unit + 6 ITs; smoke test 32/32. |
 | 2026-10-16 | 4 | Phase 4 complete. position-service: positions rebuilt from applied trades on every `trade.created`/`trade.cancelled` (weighted-average cost, realized P&L, exact cancels, trade-date order, SELL above holding skipped and recorded), idempotent consumer (`processed_event`), `position.updated` via outbox, positions/snapshots/exceptions endpoints, daily snapshot as a Spring Batch job. valuation-service: holdings copy from `position.updated` (newer update wins), live Market Value, unrealized/realized P&L and exposure by asset class and instrument with each line's price source/date/staleness, unpriced holdings reported not zero-valued, end-of-day Spring Batch job writing immutable `valuation_snapshot` + `exposure_snapshot` (basis MARKET_VALUE_ONLY, nav NULL), `valuation.calculated`, limit rules (portfolio overrides global) and once-per-day `limit.breached`, `price.updated` published on ingestion. Outbox/consumer helpers moved to common. DoD: three hand-calculated scenarios as unit tests; `scripts/demo-trades.sh` books 20 real-price trades. Smoke test 38/38. |
-| | | |
+| 2026-10-17 | 5 | Phase 5 complete. reconciliation-service: `trade.settled` consumed idempotently into `settled_trade_view`; multipart custodian upload (Admin/Ops) with header check, SHA-256 checksum and `UNIQUE(run_date, source, file_checksum)` so a re-upload returns the same run (200); raw file stored; Spring Batch job `reconciliationJob` (stage step: reader → row validator → batch writer, chunk 500; match step) with bad rows in `custodian_record_error`; hash-map matching engine on `trade_ref + isin + trade_date` (signed quantity exact, price tolerance ₹0.01 from config) detecting all four break types; run summary with per-type counts and match rate; break workflow OPEN → IN_REVIEW → ESCALATED/RESOLVED with mandatory comments, row locks, immutable `break_action_audit` (before/after JSON), ageing and SLA-overdue flag; `recon.break.created`/`recon.break.resolved` via outbox. PMs have no recon access. `scripts/generate-custodian-file.py` plants 3/3/4/4 breaks in the demo book. DoD met in `ReconciliationIT` (exactly 3/3/4/4; a break worked to resolution with 4 audit entries); 10k rows reconcile in under 30 s. Tests: 194 total; smoke test 42/42. |
 | | | |

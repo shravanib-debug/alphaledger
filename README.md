@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-170%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-194%20passing-success)
 
 ---
 
@@ -40,7 +40,7 @@ match the custodian's.**
 | **Events** | Every change is published to **Kafka** through a transactional outbox: `trade.*`, `position.updated`, `price.updated`, `valuation.calculated`, `limit.breached`; consumers are idempotent | ✅ Built |
 | **Market data** | Pluggable price sources; **real NSE and AMFI closing prices** for listed instruments and mutual funds, synthetic Level 3 marks for private holdings; every price shows its source, date and whether it is stale | 🟨 Foundation built; live NSE/AMFI downloads later |
 | **Positions & valuation** | Holdings and weighted-average cost rebuilt from trade events (exact cancels, realized P&L); live Market Value, unrealized P&L and exposure by asset class and instrument, every line with its price source; end-of-day snapshots and asset-class limits with breach alerts. Full NAV (cash and liabilities) in v1.5 | ✅ Built |
-| **Reconciliation** (signature feature) | Match a custodian file to settled trades on `trade ref + ISIN + trade date`; detect missing, quantity and price breaks; assign, resolve and escalate with an audit trail | ⬜ Planned |
+| **Reconciliation** (signature feature) | Match a custodian file to settled trades on `trade ref + ISIN + trade date`; detect missing, quantity and price breaks; assign, resolve and escalate with an audit trail | ✅ Done |
 | **Notifications & resilience** | Alerts for breaks and limit breaches; retries, dead-letter topics, circuit breakers | ⬜ Planned |
 | **Analytics** | Warehouse-style star schema, data-quality checks, AUM and break-trend views | ⬜ Planned |
 | **Dashboard** | React UI for PMs and Operations Analysts | ⬜ Planned |
@@ -60,7 +60,7 @@ match the custodian's.**
 | 4A | Market data: price sources, NSE holiday calendar, T+1 | 🟨 Foundation done; live adapters after Phase 5 |
 | 4 | Positions and valuation (market value, P&L, exposure, limits) | ✅ |
 | 4B | NAV extension (cash, liabilities) | ⬜ Next |
-| 5 | Reconciliation engine | ⬜ |
+| 5 | Reconciliation engine | ✅ |
 | 6 | Notifications and resilience | ⬜ |
 | 7 | Data engineering and analytics | ⬜ |
 | 8 | React frontend | ⬜ |
@@ -83,7 +83,7 @@ flowchart LR
     GW --> TR[trade-service]
     GW --> VAL[valuation-service]
     GW --> POS[position-service]
-    GW --> REC[reconciliation-service<br/>Phase 5]
+    GW --> REC[reconciliation-service]
 
     TR -- validates via --> PF
     TR -- outbox relay --> K[(Kafka)]
@@ -114,7 +114,7 @@ flowchart LR
 | `trade-service` | 8083 | Trade capture, validation, lifecycle, settlement, outbox | ✅ |
 | `valuation-service` | 8085 | Prices (source badges), Market Value, P&L, exposure, limits, end-of-day snapshots; NAV in v1.5 | ✅ |
 | `position-service` | 8084 | Holdings, weighted-average cost, realized P&L, daily snapshots | ✅ |
-| `reconciliation-service` | 8086 | Custodian file ingest, matching, breaks | Skeleton |
+| `reconciliation-service` | 8086 | Custodian file ingest, matching, breaks | Done |
 | `notification-service` | 8087 | In-app and email notifications | Skeleton |
 | `analytics-service` | 8088 | Analytics ETL and reporting APIs | Skeleton |
 
@@ -204,7 +204,7 @@ All four share the local demo password `Demo@AlphaLedger2026`.
 |---|---|---|
 | `anita.admin@alphaledger.test` | ADMIN | Everything, including user management, manual settlement and price uploads |
 | `priya.pm@alphaledger.test` | PM | Manage her portfolios (the 3 demo portfolios), capture and cancel trades, add instruments |
-| `rohan.ops@alphaledger.test` | OPS_ANALYST | Read portfolios, trades and prices (reconciliation from Phase 5) |
+| `rohan.ops@alphaledger.test` | OPS_ANALYST | Read portfolios, trades and prices; upload custodian files and work breaks |
 | `vikram.auditor@alphaledger.test` | AUDITOR | Read only |
 
 Demo portfolios (managed by Priya): *AlphaLedger India Credit Opportunities Fund I*, *AlphaLedger Bharat Real Assets
@@ -249,6 +249,19 @@ Things worth trying:
 - **Events:** open Kafka UI, topic `trade.created`, to see the event for your trade.
 - **Audit trail:** open `/api/v1/trades/{id}/audit` for any trade.
 
+**Reconciliation** (after `scripts/demo-trades.sh`, once the trades have settled on 15-Oct):
+
+```bash
+python scripts/generate-custodian-file.py   # writes custodian-2026-10-15.csv with 3/3/4/4 planted breaks
+OPS=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"rohan.ops@alphaledger.test","password":"Demo@AlphaLedger2026"}' | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+curl -s -H "Authorization: Bearer $OPS" -F file=@custodian-2026-10-15.csv "localhost:8080/api/v1/recon/runs?runDate=2026-10-15"
+curl -s -H "Authorization: Bearer $OPS" "localhost:8080/api/v1/recon/breaks?status=OPEN"
+```
+
+The run reports 3 missing-internal, 3 missing-external, 4 quantity and 4 price breaks. Work them with
+`/api/v1/recon/breaks/{id}/assign`, `/escalate` and `/resolve` (a comment is required), and read `/audit`.
+
 In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` into **Authorize**.
 
 ---
@@ -257,11 +270,11 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 
 | Level | What | Tools |
 |---|---|---|
-| Unit | Trade state machine, T+1 and holiday rules, holding checks, position math (average cost, realized P&L, exact cancels), valuation and exposure (three hand-calculated scenarios), token issuing and rotation, ISIN check digits, price validation and the synthetic-price rule | JUnit 5, AssertJ, Mockito |
+| Unit | Trade state machine, T+1 and holiday rules, holding checks, position math (average cost, realized P&L, exact cancels), valuation and exposure (three hand-calculated scenarios), token issuing and rotation, ISIN check digits, price validation the synthetic-price rule, reconciliation matching (every break type, tolerance boundaries) and the break workflow | JUnit 5, AssertJ, Mockito |
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
-| Smoke | 38 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation | `scripts/smoke-test.sh` |
+| Smoke | 42 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **170 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **194 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 
@@ -273,7 +286,7 @@ Currently **170 automated tests**, all passing (`./mvnw verify`; integration tes
 | `services/` | Spring Boot services: platform (`discovery-server`, `config-server`, `api-gateway`) and business services |
 | `reference-data/` | Committed reference data: instrument master (stable IDs), NSE holidays, synthetic marks, seed closes |
 | `infra/` | Docker Compose stack, shared service Dockerfile, Postgres init, `.env.example` |
-| `scripts/` | Smoke test, demo trade loader |
+| `scripts/` | Smoke test, demo trade loader, custodian file generator |
 | `docs/` | PRD, architecture, roadmap, events, conventions, Postman collection |
 | `frontend/` | React dashboard (Phase 8) |
 
@@ -291,6 +304,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | Real public prices, synthetic transactions | Credible valuations with real data, while trade and custodian data stays synthetic |
 | Rejected trades are stored, not just refused | The blotter and audit trail show every attempted trade, as in real trade capture |
 | Positions rebuilt from all their trades on every event | Cancels are exact even after later trades, and a duplicate event can never double-count |
+| Reconciliation matched in memory in one Spring Batch run, every break action audited | 10k rows in under 30 s; breaks, audit and events commit together |
 | Spring Boot 4 and Java 21 | The currently supported Spring line and Java LTS |
 | HS256 JWTs checked at the gateway and in every service | Simple to run locally, and a service reached directly still rejects forged tokens |
 

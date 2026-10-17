@@ -678,6 +678,121 @@
           }
         }
       ]
+    },
+    {
+      "name": "Reconciliation",
+      "item": [
+        {
+          "name": "Upload custodian file (Admin/Ops)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/recon/runs?runDate=2026-10-15",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "custodian-2026-10-15.csv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Run history",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/recon/runs"
+          }
+        },
+        {
+          "name": "Run summary",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/recon/runs/1"
+          }
+        },
+        {
+          "name": "Rejected rows",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/recon/runs/1/errors"
+          }
+        },
+        {
+          "name": "Open breaks",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/recon/breaks?status=OPEN"
+          }
+        },
+        {
+          "name": "Break detail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/recon/breaks/1"
+          }
+        },
+        {
+          "name": "Assign break",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/recon/breaks/1/assign",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigneeId\": 3,\n  \"comment\": \"Checking the contract note\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Escalate break",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/recon/breaks/1/escalate",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Needs the broker to confirm\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Resolve break",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/recon/breaks/1/resolve",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"ACCEPT_EXTERNAL\",\n  \"comment\": \"Custodian price confirmed\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Break audit trail",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/recon/breaks/1/audit"
+          }
+        }
+      ]
     }
   ]
 }

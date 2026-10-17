@@ -99,3 +99,12 @@ Consumer: valuation-service.
 | `limit.breached` | `LIMIT_BREACHED` | `portfolioId` | An asset class's share of market value exceeds its limit (once per portfolio, asset class and day) | `portfolioId`, `assetClass`, `exposurePct`, `maxPct`, `marketValue`, `asOfDate` |
 
 Consumers (planned): notification-service (`limit.breached`, Phase 6), analytics (`valuation.calculated`, Phase 7).
+
+## Reconciliation events (producer: reconciliation-service)
+
+| Topic | `eventType` | Key | Emitted when | Payload |
+|---|---|---|---|---|
+| `recon.break.created` | `RECON_BREAK_CREATED` | `runId` | A run finds a break (one event per break) | `breakId`, `runId`, `breakType`, `tradeRef`, `isin`, `tradeDate`, `portfolioId` (null for `MISSING_INTERNAL`), `internalQuantity`, `externalQuantity`, `internalPrice`, `externalPrice`, `status`, `resolutionType` (null), `assignedTo` |
+| `recon.break.resolved` | `RECON_BREAK_RESOLVED` | `breakId` | A break is resolved | Same payload, with `status` `RESOLVED` and `resolutionType` set |
+
+Quantities are signed (SELL negative). reconciliation-service consumes `trade.settled` (group `reconciliation-service`, idempotent by `eventId`). Consumers (planned): notification-service (`recon.break.created`, Phase 6), analytics (both, Phase 7).

@@ -192,6 +192,23 @@ expect_status "exposure by asset class (200)"   200 -H "Authorization: Bearer $A
 expect_status "PM cannot set limit rules (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN" \
     -H 'Content-Type: application/json' -d '{"assetClass":"CREDIT","maxPct":50}' "$GATEWAY/api/v1/valuations/limit-rules"
 
+# ---------- Phase 5: reconciliation ----------
+check "reconciliation-service registered"     "$EUREKA/eureka/apps/RECONCILIATION-SERVICE" '"RECONCILIATION-SERVICE"'
+OPS_TOKEN=$(login rohan.ops@alphaledger.test)
+recon_file="smoke-recon-$$.csv"
+printf 'trade_ref,isin,trade_date,settle_date,side,quantity,price
+SMOKE-CUST-%s,INE002A01018,2026-10-13,2026-10-14,BUY,10,1174.60
+' "$$" > "$recon_file"
+recon=$(curl -sS -X POST -H "Authorization: Bearer $OPS_TOKEN" -F "file=@$recon_file;filename=custodian.csv"     "$GATEWAY/api/v1/recon/runs?runDate=2026-10-14" || true)
+if [[ "$recon" == *'"status":"COMPLETED"'* && "$recon" == *'"missing_internal":1'* ]]; then
+    echo "PASS  custodian upload reconciled (unknown trade -> MISSING_INTERNAL break)"
+else
+    echo "FAIL  custodian upload reconciled: $recon"; failures=$((failures + 1))
+fi
+expect_status "PM cannot upload custodian files (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN"     -F "file=@$recon_file;filename=custodian.csv" "$GATEWAY/api/v1/recon/runs?runDate=2026-10-14"
+rm -f "$recon_file"
+expect_status "auditor can read breaks (200)"   200 -H "Authorization: Bearer $AUDITOR_TOKEN"     "$GATEWAY/api/v1/recon/breaks"
+
 if (( failures > 0 )); then
     echo "$failures check(s) failed"
     exit 1

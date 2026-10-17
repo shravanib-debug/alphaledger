@@ -376,7 +376,9 @@ for key in internal not in external   -> MISSING_EXTERNAL
 
 - **Match key and ISIN:** `matchKey = trade_ref + isin + trade_date`. Custodian files identify securities by ISIN, not by our internal `instrument_id` or the exchange symbol (symbols can change and differ between NSE and BSE). The ISIN comes from the `trade.settled` payload into `settled_trade_view`, so matching needs no call to portfolio-service. A custodian row whose ISIN is unknown is still staged and surfaces as `MISSING_INTERNAL`.
 - **Performance:** hash-map matching, chunk size 500, batch inserts. Target is 10k records in under 30 s.
-- **Idempotency:** file checksum + `(run_date, source)` unique constraint.
+- **Idempotency:** file checksum + `(run_date, source)` unique constraint. Re-uploading the same file for the same date returns the existing run (HTTP 200) and creates nothing.
+- **As built (Phase 5):** a Spring Batch job with two steps: `stageCustodianRecords` (reader over the stored file → `CustodianRowValidator` → batch writer, chunk 500) and `matchAndRaiseBreaks` (one transaction: engine run, breaks, `CREATED` audit rows, outbox events, run summary). Rows are rejected for a wrong column count, bad ISIN, unknown side, bad dates, non-positive numbers, `settle_date` not equal to the run date, or a duplicate match key in the file. Quantities are compared signed (SELL negative), so a side mismatch is a quantity break. A failed job marks the run `FAILED` with the error.
+- **Break workflow:** `OPEN → IN_REVIEW` (assign) `→ ESCALATED` (escalate), and `IN_REVIEW`/`ESCALATED → RESOLVED` with `ACCEPT_EXTERNAL`, `ADJUST_INTERNAL` or `KNOWN_DIFFERENCE`. Every action needs a comment, locks the row and writes an immutable `break_action_audit` entry with before/after state. Resolved breaks are never reopened. Ageing: `age_days` and `overdue` (older than `alphaledger.recon.sla-days`, default 3).
 
 ### 5.6 Pipeline 5: Analytics ETL pipeline (data warehouse style)
 - **Type:** Scheduled batch (nightly) plus optional Kafka-fed incremental loads.
@@ -563,13 +565,18 @@ processed_event(event_id PK, processed_at)
 
 ### 6.6 `recon_db`
 ```
-recon_run(id, run_date, source, file_name, file_checksum, status, total_records,
-          matched_count, break_count, started_at, completed_at, UNIQUE(run_date, source, file_checksum))
+recon_run(id, run_date, source, file_name, file_checksum, status, total_records, error_rows, internal_trades,
+          matched_count, break_count, missing_internal, missing_external, qty_mismatch, price_mismatch,
+          created_by, started_at, completed_at, error_message, UNIQUE(run_date, source, file_checksum))
+custodian_file(run_id FK, content)                    -- raw copy of the uploaded file
 custodian_record(id, run_id FK, trade_ref, isin, trade_date, quantity, price, raw_row)
 custodian_record_error(id, run_id, row_number, error_message, raw_row)
-settled_trade_view(trade_id, trade_ref, instrument_id, isin, trade_date, quantity, price, portfolio_id)
+settled_trade_view(trade_id, trade_ref, portfolio_id, instrument_id, isin, side, quantity, price, trade_date,
+                   settle_date, received_at)
 recon_break(id, run_id FK, trade_ref, isin, break_type, internal_qty, external_qty,
-            internal_price, external_price, status, assigned_to, created_at, resolved_at, resolution_type)
+            internal_price, external_price, status, assigned_to, created_at, resolved_at, resolution_type,
+            resolution_comment, version)
+processed_event(event_id, processed_at)
 break_action_audit(id, break_id FK, action, performed_by, comment, before_state, after_state, performed_at)
 outbox_event(...)
 ```
@@ -639,6 +646,8 @@ dq_check_result(id, check_name, run_at, status, details)
 | Recon | `POST /api/v1/recon/breaks/{id}/assign` | Assign analyst |
 | Recon | `POST /api/v1/recon/breaks/{id}/resolve` | Resolve with action + comment |
 | Recon | `GET /api/v1/recon/breaks/{id}/audit` | Audit trail |
+| Recon | `POST /api/v1/recon/breaks/{id}/escalate` | Escalate with comment |
+| Recon | `GET /api/v1/recon/runs`, `/runs/{id}/errors` | Run history, rejected rows |
 | Notification | `GET /api/v1/notifications` | List notifications |
 | Analytics | `GET /api/v1/analytics/aum-by-asset-class` | Mart view |
 | Analytics | `GET /api/v1/analytics/break-trend` | Mart view |
@@ -824,6 +833,7 @@ alphaledger/
 | 17 | Build the market-data foundation (PriceSource, synthetic marks, CSV upload, real seed closes, NSE holidays) now; defer the live NSE/AMFI/mfapi adapters until after reconciliation (Phase 5) | Gets the end-to-end flow (trade → position → value → reconciliation) working first while still using real prices (a committed seed of real closes); the adapters are the riskiest work (external formats, throttling, terms) and slot in behind the same interface | Prices stay at the seed date until the adapters land (shown as stale with their data date); manual CSV upload is the stop-gap for fresher prices |
 | 18 | position-service rebuilds a holding from all its applied trades on every event (instead of adding and subtracting) | Cancels are reversed exactly even after later trades, back-dated trades land in trade-date order, and a redelivered event cannot double-count | Re-reads a holding's trades per event (cheap at this scale; snapshots or periodic compaction would be needed for very long histories) |
 | 19 | Live valuation computed on request; end-of-day snapshots stored by Spring Batch | Always reflects the latest positions and prices with no cache to invalidate; batch gives one recorded, non-repeatable run per date | Each valuation request reads prices per holding; a cache can be added if portfolios grow large |
+| 20 | Reconciliation matches in memory with a hash map inside one Spring Batch run; quantities compared signed | 10k rows in well under 30 s with simple, testable code; one transaction makes breaks, audit and events all-or-nothing | A run is bounded by memory (fine for one custodian file per day); very large files would need a SQL join instead |
 
 ---
 
