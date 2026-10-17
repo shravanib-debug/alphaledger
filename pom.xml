@@ -39,8 +39,11 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-cloud.version>2025.1.3</spring-cloud.version>
         <springdoc.version>3.0.3</springdoc.version>
-        <!-- Tests run in UTC like the services (see each *Application.main); avoids host-specific zone names. -->
-        <argLine>-Duser.timezone=UTC</argLine>
+        <resilience4j.version>2.3.0</resilience4j.version>
+        <!-- Tests run in UTC like the services (see each *Application.main); avoids host-specific zone names.
+             Offline guard: every JVM HTTP(S) request to a non-local host goes to a dead proxy on 127.0.0.1:9 and
+             fails, so no test can reach the internet (local hosts bypass the proxy by default) (Testcontainers talks to Docker over its socket, not HTTP). -->
+        <argLine>-Duser.timezone=UTC -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=9 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=9</argLine>
     </properties>
 
     <dependencyManagement>

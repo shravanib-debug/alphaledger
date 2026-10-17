@@ -285,8 +285,9 @@ alphaledger:
   marketdata:
     mode: OFFLINE                  # OFFLINE (default for local demo, tests, CI) | LIVE
     network-enabled: false         # hard guard: HTTP fetch modes throw if false
-    local-dir: reference-data/sample/prices
-    cache-dir: data/market-cache   # git-ignored
+    sample-enabled: true           # OFFLINE: parse the committed sample (reference-data/sample/nse|amfi) on startup
+    cache-dir: data/market-cache   # LIVE: raw files, {source}/{yyyy}/{file}; git-ignored
+    nse-download: false            # NSE terms prohibit automated collection: bhavcopies are saved here by hand
     max-staleness-business-days: 5 # DQ warning threshold; any price older than its expected date is already flagged stale
     fallback-order:
       EQUITY:      [NSE_BHAVCOPY]
@@ -299,7 +300,8 @@ alphaledger:
 ```
 
 - For each instrument and data date, sources are tried in order; a later source only fills instruments the earlier ones did not price. One price per instrument per data date per source is stored, and valuation reads the most recent price, breaking ties by the configured order.
-- In `OFFLINE` mode, `NseBhavcopyPriceSource` and `AmfiNavPriceSource` read the committed sample files from `local-dir` (so the real parsers still run). In `LIVE` mode they download from the public URLs.
+- In `OFFLINE` mode, `NseBhavcopyPriceSource` and `AmfiNavPriceSource` read the committed sample files from the classpath (`reference-data/sample/nse|amfi`, so the real parsers still run). In `LIVE` mode they read `cache-dir`: AMFI's NAVAll.txt is downloaded into it when missing; NSE bhavcopies are saved there by hand (automatic NSE download is off, see §5.8 and ADR 22). `MfApiPriceSource` runs only in `LIVE` mode with the network on.
+- **As built (Phase 4A):** a source that has no file for the date (holiday, not published, not in the sample) is logged as a `FAILED` ingestion with the reason and writes nothing. `POST /api/v1/marketdata/ingestions` runs the daily fallback or one source for a date; `POST /api/v1/marketdata/ingestions/backfill` repeats it for each business day of a range (at most 31 days, Admin only); both are idempotent by checksum. All market-data HTTP goes through one guarded client (`MarketDataHttp`), and the test JVMs route every non-local HTTP(S) request to a dead proxy, so a test that tried to reach the internet would fail.
 - `SYNTHETIC` prices only instruments with `is_synthetic = true`, plus demo intraday ticks in `OFFLINE` mode. It never appears in the fallback list of a real instrument type.
 - If no real source prices a real instrument, no price is written and a synthetic price is **never** substituted: the last real price is kept and flagged stale, alongside its `data_date`. Gaps are expected for thinly traded bonds.
 - **Staleness rule (one definition everywhere):** a price is stale when its `data_date` is earlier than the expected price date, which is the most recent business day (per `holiday_calendar`) on or before the valuation date; for `is_synthetic` instruments it is the most recent quarter-end. When a stale price is older than `max-staleness-business-days`, a data-quality warning is also raised.
@@ -437,25 +439,26 @@ erDiagram
 | Item | Detail |
 |---|---|
 | File | UDiFF "CM common bhavcopy", one ZIP per trading day containing one CSV |
-| URL pattern | `https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{YYYYMMDD}_F_0000.csv.zip` (downloaded successfully for 20261014). Official stability of this path: **TO VERIFY** |
+| URL pattern | `https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_{YYYYMMDD}_F_0000.csv.zip` (downloaded for each trading day 08-16 Oct 2026, 7 files, once each). The path is not documented by NSE as a stable API; it is the link behind "All Reports > Capital Market" |
 | Header (34 columns, observed) | `TradDt,BizDt,Sgmt,Src,FinInstrmTp,FinInstrmId,ISIN,TckrSymb,SctySrs,XpryDt,FininstrmActlXpryDt,StrkPric,OptnTp,FinInstrmNm,OpnPric,HghPric,LwPric,ClsPric,LastPric,PrvsClsgPric,UndrlygPric,SttlmPric,OpnIntrst,ChngInOpnIntrst,TtlTradgVol,TtlTrfVal,TtlNbOfTxsExctd,SsnId,NewBrdLotQty,Rmks,Rsvd1,Rsvd2,Rsvd3,Rsvd4` |
 | Columns used | `TradDt` (data date, `yyyy-MM-dd`), `ISIN`, `TckrSymb`, `SctySrs`, `FinInstrmNm`, `ClsPric` (stored price), `TtlTradgVol` (kept for DQ) |
-| Series observed | `EQ`/`BE`/`BZ` (equities), `RR` (REITs), `IV` (InvITs), `GS` (G-secs), `N0` to `NZ` and `Y*` (NCDs/bonds), `GB` (sovereign gold bonds), `SM`/`ST` (SME). Official meaning of each code: **TO VERIFY** in NSE's UDiFF catalogue |
+| Series observed | `EQ`/`BE`/`BZ` (equities), `RR` (REITs), `IV` (InvITs), `GS` (G-secs), `N0` to `NZ` and `Y*` (NCDs/bonds), `GB` (sovereign gold bonds), `SM`/`ST` (SME), `BL` (block-deal window: on 08-Oct-2026 RELIANCE and ICICIBANK appear in both `BL` and `EQ` at different prices). The parser ignores `BL` rows and prefers `EQ` when an ISIN appears twice. Official meaning of each code: **TO VERIFY** in NSE's UDiFF catalogue (not found publicly) |
 | Format history | NSE replaced the legacy `cmDDMONYYYYbhav.csv.zip` file with the UDiFF file; the NSE reports page labels the legacy file as discontinued from 08-Jul-2024 (**TO VERIFY** against the NSE circular). NSE circulars also announce further report changes in 2026, so the parser is isolated in `NseBhavcopyParser` and validates the header before reading rows |
-| Access notes | Download worked with a browser-like `User-Agent`; NSE may throttle or block automated access. Publication time each day and terms of use: **TO VERIFY** |
+| Terms of use | NSE's website terms of use (read 17-Oct-2026) state: "User is prohibited to conduct any systematic or automated data collection activities (including scraping, data mining, data extraction and data harvesting) on or in relation to our Website". AlphaLedger therefore never downloads from NSE on a schedule: in `LIVE` mode bhavcopies are saved by hand into `data/market-cache/NSE_BHAVCOPY/{yyyy}/` and read from there; automatic download (`nse-download: true`) exists only for use with NSE's consent, e.g. an NSE Data licence, and is off by default (ADR 22) |
+| Publication time | Not published by NSE as a fixed time; the daily run is scheduled late (23:30 IST) so the day's file is normally out |
 
 #### AMFI NAVAll.txt (primary for mutual funds)
 | Item | Detail |
 |---|---|
-| URL | `https://www.amfiindia.com/spages/NAVAll.txt`, which on 15-Oct-2026 redirected (HTTP 302) to `https://portal.amfiindia.com/spages/NAVAll.txt`. Use the portal URL and follow redirects |
+| URL | `https://www.amfiindia.com/spages/NAVAll.txt`, which redirects (HTTP 302, re-confirmed 17-Oct-2026) to `https://portal.amfiindia.com/spages/NAVAll.txt`. The client follows redirects. The file holds only the latest NAV per scheme, so a backfill of older dates needs mfapi.in or AMFI's history report |
 | Encoding | UTF-8, CRLF line endings, semicolon-separated, about 18,000 lines (about 14,400 scheme rows) |
 | Header (8 columns, observed) | `Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date` |
 | Non-data lines | Category headings such as `Open Ended Schemes(Debt Scheme - Banking and PSU Fund)`, AMC name lines such as `Axis Mutual Fund`, and blank lines. The reader skips any line that does not start with a numeric scheme code, but carries the last category and AMC as context |
 | Values | Missing ISINs are `-`; `Date` is `dd-MMM-yyyy` (e.g. `14-Oct-2026`); some schemes show NAV `0`. A zero or non-numeric NAV is a rejected row |
 | Matching | Either ISIN column may match `instrument.isin`; growth-option ISINs are used for the demo |
-| Ingestion | Spring Batch job `amfiNavIngestJob`: `FlatFileItemReader` with a custom line mapper (skip non-data lines), processor (ISIN lookup, validation), JDBC writer, `price_ingestion_log` listener |
+| Ingestion | Spring Batch job `amfiNavIngestJob` (as built): header check, then a reader over the file's lines → processor (`AmfiNavParser`: skip headings and funds we do not hold, reject bad NAVs) → writer collecting the run's prices (chunk 1000). The collected batch then goes through the shared pipeline (checksum, validation, upsert, `price_ingestion_log`, `price.updated`) like every other source |
 | Historical files | AMFI's NAV history download: URL and format **TO VERIFY**; mfapi.in covers backfill instead |
-| Publication time and terms of use | **TO VERIFY** |
+| Publication time | SEBI's 2006 circular set 9:00 pm for uploading NAVs to the AMFI website; current AMC documents state 11:00 pm. The daily run is at 23:30 IST. AMFI's own terms for NAVAll.txt: **TO VERIFY** (no terms page found; the file is public and downloaded once a day) |
 
 #### mfapi.in (optional fallback and backfill)
 | Item | Detail |
@@ -463,7 +466,7 @@ erDiagram
 | Endpoints (checked) | `GET https://api.mfapi.in/mf/{schemeCode}` (full NAV history), `GET https://api.mfapi.in/mf/{schemeCode}/latest`, `GET https://api.mfapi.in/mf/search?q={text}` |
 | Response (checked) | `{"meta": {fund_house, scheme_type, scheme_category, scheme_code, scheme_name, isin_growth, isin_div_reinvestment}, "data": [{"date": "dd-MM-yyyy", "nav": "<string>"}], "status": "SUCCESS"}`; history is newest first |
 | Use | Keyed by AMFI scheme code (`instrument.amfi_scheme_code`); used only for gaps and FR-DATA-10 backfill. Circuit breaker + rate limiter; never a hard dependency |
-| Rate limits, SLA, terms | Community service; **TO VERIFY** |
+| Rate limits, SLA, terms | Free community service with no published terms or limits found (17-Oct-2026): **TO VERIFY**. Treated as best effort: at most 2 calls a second (Resilience4j rate limiter), a circuit breaker opens after repeated failures (5 min), only for funds AMFI did not price, and only in `LIVE` mode with the network on. Tests use a local stub server, never the real site |
 
 #### yfinance (last resort, manual only)
 - Tickers `<NSE symbol>.NS` / `<BSE code or symbol>.BO`. Unofficial scraper of Yahoo Finance; Yahoo's terms on automated use: **TO VERIFY**. Not wired into the pipeline (see §5.3).
@@ -477,10 +480,10 @@ erDiagram
 - `reference-data/instruments/instrument_master.csv`: `instrument_id` (stable integer, never reused or renumbered), ISIN, symbol, exchange, name, `instrument_type`, `asset_class`, `asset_class_proxy`, `amfi_scheme_code`, `is_synthetic`. Built once from the NSE equity list (`https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv`, columns `SYMBOL,NAME OF COMPANY, SERIES, DATE OF LISTING, PAID UP VALUE, MARKET LOT, ISIN NUMBER, FACE VALUE`), the bhavcopy (REITs, InvITs, G-secs, NCDs), and `NAVAll.txt` (mutual funds). Both `portfolio_db.instrument(id)` and `valuation_db.instrument_ref(instrument_id)` are seeded from the same `instrument_id` column of this one CSV (no database-generated IDs for seeded rows), so IDs are identical across services and the two copies cannot drift in v1. Events carry both `instrumentId` and `isin`; ISIN is the fallback join key. Instruments created later through the API need an `instrument.upserted` event, which is out of scope for v1.
 
 #### Offline sample dataset and network policy
-- `reference-data/sample/prices/seed_closes_2026-10-14.csv` (committed now): the 14-Oct-2026 closes of the 26 real demo instruments, hand-filtered from that day's NSE bhavcopy (19) and AMFI NAVAll (7), each row recording its real source. Loaded on startup through the CSV path, so the demo has real prices before the adapters exist.
-- `reference-data/sample/prices/` (with the adapters): bhavcopy and NAVAll files **filtered to the demo ISINs** for the demo window (a few hundred rows in total), in the original formats so the real parsers run against them.
+- `reference-data/sample/prices/seed_closes_2026-10-14.csv`: the 14-Oct-2026 closes of the 26 real demo instruments, hand-filtered from that day's NSE bhavcopy (19) and AMFI NAVAll (7), each row recording its real source. Loaded on startup through the CSV path; kept because it has the 14-Oct NAVs, which NAVAll (latest day only) cannot supply.
+- `reference-data/sample/nse/BhavCopy_NSE_CM_0_0_0_{yyyyMMdd}_F_0000.csv` (7 trading days, 08-16 Oct 2026, 17-20 rows each) and `reference-data/sample/amfi/NAVAll_2026-10-16.txt` (7 funds, with their category and AMC heading lines): the real files **filtered to the demo ISINs**, in the original formats, so the real parsers run against them. Loaded on startup in `OFFLINE` mode (`sample-enabled`). The PFC tax-free bond traded only on 14-Oct in this window, so it shows as stale on later dates, as a thinly traded bond should.
 - `reference-data/synthetic/synthetic_marks.csv`: the committed quarterly marks for the synthetic private instruments. They are used in both `OFFLINE` and `LIVE` mode, so they live outside the sample folder.
-- `scripts/market-data/download.sh` refreshes the local cache from the public URLs; `scripts/market-data/make-sample.sh` regenerates the filtered sample. Raw files are cached in git-ignored `data/market-cache/` and never committed.
+- `scripts/market-data/download.sh` fetches AMFI's NAVAll.txt into the cache (one request, cached); for NSE it only prints where to save a browser download, unless `NSE_MANUAL_FETCH=yes` is set for a deliberate one-off fetch. `scripts/market-data/make-sample.sh` regenerates the filtered sample. Raw files stay in git-ignored `data/market-cache/` and are never committed.
 - Unit tests parse saved sample files; integration tests and CI run with `mode=OFFLINE` and `network-enabled=false`, so the build never calls external sites.
 
 ---
@@ -834,6 +837,8 @@ alphaledger/
 | 18 | position-service rebuilds a holding from all its applied trades on every event (instead of adding and subtracting) | Cancels are reversed exactly even after later trades, back-dated trades land in trade-date order, and a redelivered event cannot double-count | Re-reads a holding's trades per event (cheap at this scale; snapshots or periodic compaction would be needed for very long histories) |
 | 19 | Live valuation computed on request; end-of-day snapshots stored by Spring Batch | Always reflects the latest positions and prices with no cache to invalidate; batch gives one recorded, non-repeatable run per date | Each valuation request reads prices per holding; a cache can be added if portfolios grow large |
 | 20 | Reconciliation matches in memory with a hash map inside one Spring Batch run; quantities compared signed | 10k rows in well under 30 s with simple, testable code; one transaction makes breaks, audit and events all-or-nothing | A run is bounded by memory (fine for one custodian file per day); very large files would need a SQL join instead |
+| 21 | Resilience4j core modules (circuit breaker, rate limiter) used directly, not through a Spring Boot starter | Only the mfapi.in fallback needs them; the core modules have no Spring Boot version coupling | Configured in code rather than YAML; Phase 6 can add the starter if more call sites need it |
+| 22 | No scheduled download from NSE; bhavcopies are saved by hand (LIVE) or read from a committed filtered sample (OFFLINE) | NSE's terms prohibit systematic or automated data collection; AMFI's single daily file and mfapi.in have no such published restriction | LIVE prices for listed instruments need a person (or an NSE Data licence with `nse-download: true`); the demo and CI run on the committed sample |
 
 ---
 

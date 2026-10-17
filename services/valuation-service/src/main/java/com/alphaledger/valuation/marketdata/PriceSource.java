@@ -15,6 +15,9 @@ public interface PriceSource {
     /** Whether this source may price the instrument (e.g. by instrument type, or synthetic-only). */
     boolean supports(InstrumentRef instrument);
 
-    /** Fetches prices for {@code dataDate} for the given (already supported) instruments. */
+    /**
+     * Fetches prices for {@code dataDate} for the given (already supported) instruments. Throws when the source has
+     * nothing for that date ({@link PriceFileUnavailableException}) or the network is needed but switched off.
+     */
     PriceBatch fetch(LocalDate dataDate, Collection<InstrumentRef> instruments);
 }

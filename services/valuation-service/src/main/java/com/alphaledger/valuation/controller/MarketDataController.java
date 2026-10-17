@@ -30,6 +30,7 @@ import com.alphaledger.valuation.marketdata.PriceIngestionService;
 import com.alphaledger.valuation.marketdata.PriceIngestionService.IngestionSummary;
 import com.alphaledger.valuation.marketdata.PriceQueryService;
 import com.alphaledger.valuation.marketdata.PriceQueryService.LatestPrice;
+import com.alphaledger.valuation.marketdata.PriceSource;
 import com.alphaledger.valuation.marketdata.PriceSourceName;
 import com.alphaledger.valuation.marketdata.PriceSourceRegistry;
 
@@ -100,7 +101,28 @@ public class MarketDataController {
             return ingestion.runDaily(date);
         }
         return List.of(ingestion.runSource(registry.get(request.source()).orElseThrow(() ->
-                new ValidationException("source: " + request.source() + " is not available yet")), date));
+                new ValidationException("source: " + request.source() + " is not available")), date));
+    }
+
+    public record BackfillRequest(PriceSourceName source,
+                                  @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                  @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+    }
+
+    /** Re-runs the daily fallback (or one source) for each business day in a range of at most 31 days. */
+    @PostMapping("/ingestions/backfill")
+    @PreAuthorize("hasRole('ADMIN')")
+    public List<IngestionSummary> backfill(@RequestBody BackfillRequest request) {
+        if (request.from() == null || request.to() == null) {
+            throw new ValidationException("from, to: are required");
+        }
+        if (request.to().isBefore(request.from()) || request.to().isAfter(clock.today())
+                || request.from().plusDays(31).isBefore(request.to())) {
+            throw new ValidationException("to: must be on or after from, not in the future, and at most 31 days later");
+        }
+        PriceSource source = request.source() == null ? null : registry.get(request.source()).orElseThrow(() ->
+                new ValidationException("source: " + request.source() + " is not available"));
+        return ingestion.backfill(source, request.from(), request.to());
     }
 
     @GetMapping("/ingestions")

@@ -1,0 +1,37 @@
+Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+
+Open Ended Schemes(Debt Scheme - Corporate Bond Fund)
+
+HDFC Mutual Fund
+
+118987;INF179K01XD8;-;HDFC Corporate Bond Fund;Direct Plan;Growth Option;35.0182;16-Oct-2026
+ICICI Prudential Mutual Fund
+
+120692;INF109K016B1;-;ICICI Prudential Corporate Bond Fund;Direct Plan;Growth;33.4132;16-Oct-2026
+
+Open Ended Schemes(Debt Scheme - Gilt Fund)
+
+Nippon India Mutual Fund
+
+118672;INF204K01XP8;-;Nippon India Gilt Fund;Direct Plan;Growth Option;44.0302;16-Oct-2026
+
+Open Ended Schemes(Equity Scheme - Flexi Cap Fund)
+
+HDFC Mutual Fund
+
+118955;INF179K01UT0;-;HDFC Flexi Cap Fund;Direct Plan;Growth Option;2184.728;16-Oct-2026
+PPFAS Mutual Fund
+
+122639;INF879O01027;-;Parag Parikh Flexi Cap Fund;Direct Plan;Growth;90.8844;16-Oct-2026
+
+Open Ended Schemes(Income/Debt Oriented Schemes - Banking and PSU Debt Fund)
+
+Aditya Birla Sun Life Mutual Fund
+
+119550;INF209K01YN0;-;Aditya Birla Sun Life Banking & PSU Debt Fund;Direct Plan;GROWTH;403.3093;16-Oct-2026
+
+Open Ended Schemes(Other Scheme - Index Funds)
+
+UTI Mutual Fund
+
+120716;INF789F01XA0;-;UTI Nifty 50 Index Fund;Direct Plan;Growth;163.0141;16-Oct-2026

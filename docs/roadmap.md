@@ -16,7 +16,7 @@
 | 1 | Foundation & Infrastructure | Monorepo, Docker infra, Gateway, Eureka, Config | ✅ |
 | 2 | Auth & Portfolio Core | Login/JWT/RBAC, portfolios and instruments | ✅ |
 | 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ✅ |
-| 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | 🟨 |
+| 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | ✅ |
 | 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ✅ |
 | 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ⬜ |
 | 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ✅ |
@@ -27,7 +27,7 @@
 | 10 | Polish, Docs & Demo | README, diagrams, demo data, walkthrough | ⬜ |
 | 11 | Stretch Goals (optional) | Flink/Spark, Snowflake, K8s, cloud | ⬜ |
 
-**Suggested order note:** the React frontend (Phase 8) can be started in parallel with Phase 5 once the Trade and Position APIs are stable. Phase 4A is split: its foundation (`PriceSource`, synthetic marks, CSV upload, real seed closes, NSE holiday calendar and T+1) is done before Phase 4, which needs prices; the real NSE bhavcopy/AMFI/mfapi adapters, file cache, download scripts and full offline sample follow after Phase 5, so the end-to-end flow (trade → position → value → reconciliation) works first. It is numbered 4A so existing phases keep their numbers.
+**Suggested order note:** the React frontend (Phase 8) can be started in parallel with Phase 5 once the Trade and Position APIs are stable. Phase 4A is split: its foundation (`PriceSource`, synthetic marks, CSV upload, real seed closes, NSE holiday calendar and T+1) is done before Phase 4, which needs prices; the real NSE bhavcopy/AMFI/mfapi adapters, file cache, download scripts and full offline sample followed after Phase 5, so the end-to-end flow (trade → position → value → reconciliation) worked first. It is numbered 4A so existing phases keep their numbers.
 
 ---
 
@@ -142,26 +142,27 @@
 - [x] `PriceSource` interface, `PriceBatch`/`PriceRecord` model, and config-driven fallback order per instrument type (`architecture.md` §5.3)
 - [x] `SyntheticPriceSource`: prices only `is_synthetic = true` instruments (committed quarterly marks in `reference-data/synthetic/synthetic_marks.csv`), plus seeded random-walk intraday ticks in `OFFLINE` mode only; removed from the fallback lists of all real instrument types
 - [x] `CsvUploadPriceSource` wired to the existing CSV price upload
-- [ ] `mode` (`OFFLINE` / `LIVE`) and `network-enabled` guard; HTTP fetch throws when the guard is off
-- [ ] Unit tests for fallback order and gap filling
+- [x] `mode` (`OFFLINE` / `LIVE`) and `network-enabled` guard; HTTP fetch throws when the guard is off
+- [x] Unit tests for fallback order and gap filling
 - [x] Tests: in `LIVE` mode a real instrument with no real price keeps its last real price, flagged stale, and never gets a `SYNTHETIC` price
 - [x] Price API responses include `source` and `data_date` so the UI can show a source badge next to every price
 
 ### Source adapters
-- [ ] Save real sample files (bhavcopy for a few dates, a trimmed NAVAll.txt) as test fixtures
-- [ ] `NseBhavcopyParser` + `NseBhavcopyPriceSource` (UDiFF CM format, header validation, ISIN match, `ClsPric`)
-- [ ] Bhavcopy unit tests against saved sample files, incl. header change, unknown ISIN, zero/blank price, holiday date
-- [ ] `AmfiNavPriceSource` as Spring Batch job `amfiNavIngestJob` (skip category/AMC/blank lines, match either ISIN column, reject zero or non-numeric NAV)
-- [ ] AMFI job tests (Spring Batch Test) against the saved sample
-- [ ] `MfApiPriceSource` fallback adapter (`/mf/{schemeCode}`, `/latest`) with circuit breaker and rate limiter; tests with a stubbed HTTP server, never the real site
-- [ ] Confirm every item marked **TO VERIFY** in `architecture.md` §5.8 and update the docs
+- [x] Save real sample files (bhavcopy for a few dates, a trimmed NAVAll.txt) as test fixtures
+- [x] `NseBhavcopyParser` + `NseBhavcopyPriceSource` (UDiFF CM format, header validation, ISIN match, `ClsPric`)
+- [x] Bhavcopy unit tests against saved sample files, incl. header change, unknown ISIN, zero/blank price, holiday date
+- [x] `AmfiNavPriceSource` as Spring Batch job `amfiNavIngestJob` (skip category/AMC/blank lines, match either ISIN column, reject zero or non-numeric NAV)
+- [x] AMFI job tests (Spring Batch Test) against the saved sample
+- [x] `MfApiPriceSource` fallback adapter (`/mf/{schemeCode}`, `/latest`) with circuit breaker and rate limiter; tests with a stubbed HTTP server, never the real site
+- [x] Confirm the **TO VERIFY** items in `architecture.md` §5.8 that can be checked from the real files and public pages, and update the docs (NSE terms found: automated collection prohibited, see ADR 22)
+- [ ] Still open (no public source found): official meaning of NSE series codes, AMFI terms for NAVAll.txt, mfapi.in terms and limits
 
 ### Idempotency and logging
 - [x] Flyway migrations: `price.source`, `price.data_date`, `price.ingestion_id`, `instrument_ref`, `holiday_calendar`, `price_ingestion_log`, `price_ingestion_error`
-- [ ] Raw file cache on disk (`data/market-cache/`, git-ignored) with SHA-256 checksum
+- [x] Raw file cache on disk (`data/market-cache/`, git-ignored) with SHA-256 checksum
 - [x] Same file ingested twice → `SKIPPED_DUPLICATE`, 0 new rows (test)
 - [x] `price_ingestion_log` rows with rows read/loaded/rejected and status; rejected rows in `price_ingestion_error`
-- [ ] Ingestion log and trigger/backfill endpoints (`/api/v1/marketdata/ingestions`)
+- [x] Ingestion log and trigger/backfill endpoints (`/api/v1/marketdata/ingestions`)
 - [x] Stale-price flag when `data_date` is earlier than the expected price date (latest business day; latest quarter-end for synthetic instruments), plus a DQ warning after `max-staleness-business-days`
 
 ### Calendar and settlement
@@ -174,11 +175,11 @@
 - [x] Build `reference-data/instruments/instrument_master.csv` with real ISINs (from NSE `EQUITY_L.csv`, bhavcopy, NAVAll.txt) plus 3 synthetic `ZZSYN…` instruments; reseed portfolio-service and valuation-service from it
 - [x] Add a stable `instrument_id` column to the instrument master; seed `portfolio_db.instrument(id)` and `valuation_db.instrument_ref(instrument_id)` from it so IDs are identical across services (test: same ID for every ISIN in both services); events keep `isin` as the fallback join key
 - [x] Re-check every demo ISIN against the latest source files before seeding
-- [ ] `scripts/market-data/download.sh` (polite, cached, one request per file) and `make-sample.sh` (filter to demo ISINs)
-- [ ] Commit the small filtered sample (`reference-data/sample/prices/`) covering the demo window
-- [ ] Trade generator uses real historical closes from the sample for synthetic trade prices
-- [ ] CI runs with `mode=OFFLINE` and `network-enabled=false`; add a check that fails the build if a test tries to reach an external host
-- [ ] README: data sources, terms-of-use notes per source, and "personal/portfolio use only; no raw data in the repo"
+- [x] `scripts/market-data/download.sh` (polite, cached, one request per file) and `make-sample.sh` (filter to demo ISINs)
+- [x] Commit the small filtered sample (`reference-data/sample/nse/`, `reference-data/sample/amfi/`) covering the demo window (08-16 Oct 2026)
+- [x] Trade generator uses real historical closes from the sample for synthetic trade prices (`scripts/demo-trades.sh` books at the 14-Oct closes, identical to the committed bhavcopy sample)
+- [x] Tests run with `mode=OFFLINE` and `network-enabled=false`; the root pom routes every non-local HTTP(S) request in test JVMs to a dead proxy, so a test that reaches for the internet fails (checked by `FallbackOrderTest`). CI itself arrives in Phase 9
+- [x] README: data sources, terms-of-use notes per source, and "personal/portfolio use only; no raw data in the repo"
 
 **DoD:** With the network disabled, `docker compose up` loads real prices for every demo ISIN from the committed sample, synthetic instruments get quarterly marks, re-ingesting the same file loads 0 rows, the ingestion log shows loaded/rejected counts, T+1 settlement skips weekends and NSE holidays, and CI is green without any external call.
 
@@ -473,4 +474,4 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-15 | 4A | Phase 4A foundation done (rest deferred until after Phase 5, ADR 17). NSE CM 2026 holiday calendar committed and loaded into trade_db and valuation_db; T+1 now skips NSE holidays (19-Oct trade settles 21-Oct, Dussehra). valuation-service: `PriceSource` interface + registry (startup fails if SYNTHETIC is configured for a real instrument type), `SyntheticPriceSource` (L3 quarterly marks; OFFLINE-only intraday ticks, off by default), CSV price upload with declared provenance, real seed closes for all 26 instruments (14-Oct-2026, from NSE bhavcopy and AMFI NAVAll), price table with source/data_date and partial unique indexes, ingestion log with checksum idempotency and rejected rows, latest price with source badge and staleness. Reference data packaged in the common jar. Tests: common 34, valuation 10 unit + 6 ITs; smoke test 32/32. |
 | 2026-10-16 | 4 | Phase 4 complete. position-service: positions rebuilt from applied trades on every `trade.created`/`trade.cancelled` (weighted-average cost, realized P&L, exact cancels, trade-date order, SELL above holding skipped and recorded), idempotent consumer (`processed_event`), `position.updated` via outbox, positions/snapshots/exceptions endpoints, daily snapshot as a Spring Batch job. valuation-service: holdings copy from `position.updated` (newer update wins), live Market Value, unrealized/realized P&L and exposure by asset class and instrument with each line's price source/date/staleness, unpriced holdings reported not zero-valued, end-of-day Spring Batch job writing immutable `valuation_snapshot` + `exposure_snapshot` (basis MARKET_VALUE_ONLY, nav NULL), `valuation.calculated`, limit rules (portfolio overrides global) and once-per-day `limit.breached`, `price.updated` published on ingestion. Outbox/consumer helpers moved to common. DoD: three hand-calculated scenarios as unit tests; `scripts/demo-trades.sh` books 20 real-price trades. Smoke test 38/38. |
 | 2026-10-17 | 5 | Phase 5 complete. reconciliation-service: `trade.settled` consumed idempotently into `settled_trade_view`; multipart custodian upload (Admin/Ops) with header check, SHA-256 checksum and `UNIQUE(run_date, source, file_checksum)` so a re-upload returns the same run (200); raw file stored; Spring Batch job `reconciliationJob` (stage step: reader → row validator → batch writer, chunk 500; match step) with bad rows in `custodian_record_error`; hash-map matching engine on `trade_ref + isin + trade_date` (signed quantity exact, price tolerance ₹0.01 from config) detecting all four break types; run summary with per-type counts and match rate; break workflow OPEN → IN_REVIEW → ESCALATED/RESOLVED with mandatory comments, row locks, immutable `break_action_audit` (before/after JSON), ageing and SLA-overdue flag; `recon.break.created`/`recon.break.resolved` via outbox. PMs have no recon access. `scripts/generate-custodian-file.py` plants 3/3/4/4 breaks in the demo book. DoD met in `ReconciliationIT` (exactly 3/3/4/4; a break worked to resolution with 4 audit entries); 10k rows reconcile in under 30 s. Tests: 194 total; smoke test 42/42. |
-| | | |
+| 2026-10-17 | 4A | Phase 4A complete. Real files downloaded once (NSE bhavcopy 08-16 Oct 2026, AMFI NAVAll 16-Oct) and filtered to the demo ISINs into `reference-data/sample/nse|amfi` by `make-sample.sh`. `NseBhavcopyParser`/`NseBhavcopyPriceSource` (header check, `ClsPric`, block-deal `BL` rows ignored and `EQ` preferred, bad rows rejected), `AmfiNavPriceSource` as Spring Batch job `amfiNavIngestJob`, `MfApiPriceSource` fallback with Resilience4j circuit breaker and rate limiter (LIVE + network only), one guarded HTTP client, raw-file cache, FAILED log entry when a source has no file, backfill endpoint, OFFLINE startup runs the real parsers over the sample (every demo instrument gets a real 16-Oct price; the thinly traded PFC bond keeps its 14-Oct price, flagged stale). NSE's terms prohibit automated collection, so NSE files are never downloaded on a schedule (ADR 22); `download.sh` only fetches AMFI unless `NSE_MANUAL_FETCH=yes`. Daily price run moved to 23:30 IST (AMFI NAVs arrive by about 23:00), EOD valuation to 23:45. Test JVMs cannot reach external hosts. Tests: 220 total. |

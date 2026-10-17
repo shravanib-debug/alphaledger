@@ -40,8 +40,8 @@ public class MarketDataJobs {
         this.properties = properties;
     }
 
-    /** End-of-day run on business days, after files are published (default 19:30 IST; NSE timing TO VERIFY). */
-    @Scheduled(cron = "${alphaledger.marketdata.daily-cron:0 30 19 * * MON-FRI}", zone = "Asia/Kolkata")
+    /** End-of-day run on business days, after files are published (default 23:30 IST: AMFI NAVs are due by about 23:00). */
+    @Scheduled(cron = "${alphaledger.marketdata.daily-cron:0 30 23 * * MON-FRI}", zone = "Asia/Kolkata")
     public void daily() {
         LocalDate today = clock.today();
         if (calendar.isBusinessDay(today)) {

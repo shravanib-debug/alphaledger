@@ -44,7 +44,7 @@ alphaledger:
   market:
     zone: Asia/Kolkata
   valuation:
-    eod-cron: "0 0 20 * * MON-FRI"   # after the 19:30 daily price run
+    eod-cron: "0 45 23 * * MON-FRI"  # after the 23:30 daily price run
   outbox:
     relay:
       poll-interval-ms: 500
@@ -54,9 +54,15 @@ alphaledger:
     max-staleness-business-days: 5
     seed-enabled: true                        # committed real seed prices + synthetic marks on startup
     intraday-ticks-enabled: ${MARKETDATA_INTRADAY_TICKS:false}
-    daily-cron: "0 30 19 * * MON-FRI"
+    daily-cron: "0 30 23 * * MON-FRI"   # AMFI NAVs are due by about 23:00 IST
+    sample-enabled: true                      # OFFLINE: parse the committed bhavcopy/NAVAll sample on startup
+    cache-dir: ${MARKETDATA_CACHE_DIR:data/market-cache}   # LIVE: downloaded raw files (git-ignored)
+    nse-url: https://nsearchives.nseindia.com/content/cm
+    nse-download: false                       # NSE terms prohibit automated collection: save bhavcopies by hand
+    amfi-url: https://www.amfiindia.com/spages/NAVAll.txt
+    mfapi-url: https://api.mfapi.in
     # SYNTHETIC is allowed only for PRIVATE (synthetic instruments); startup fails otherwise.
-    # NSE_BHAVCOPY, AMFI_NAV and MFAPI are skipped until their adapters exist (deferred part of Phase 4A).
+    # MFAPI runs only in LIVE mode with the network enabled.
     fallback-order:
       EQUITY: [NSE_BHAVCOPY]
       REIT: [NSE_BHAVCOPY]

@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-194%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-220%20passing-success)
 
 ---
 
@@ -57,7 +57,7 @@ match the custodian's.**
 | 1 | Monorepo, Docker infrastructure, gateway, service registry, config server | ✅ |
 | 2 | Authentication, roles, portfolios, instruments | ✅ |
 | 3 | Trade capture, lifecycle, outbox, Kafka events | ✅ |
-| 4A | Market data: price sources, NSE holiday calendar, T+1 | 🟨 Foundation done; live adapters after Phase 5 |
+| 4A | Market data: NSE bhavcopy and AMFI NAV parsers, mfapi.in fallback, offline sample, NSE holiday calendar, T+1 | ✅ |
 | 4 | Positions and valuation (market value, P&L, exposure, limits) | ✅ |
 | 4B | NAV extension (cash, liabilities) | ⬜ Next |
 | 5 | Reconciliation engine | ✅ |
@@ -156,16 +156,29 @@ Tuesday is Dussehra).
   - **Credit:** G-secs, NCDs and debt mutual funds
   - **Private Equity proxies:** listed equities and equity mutual funds
 
-  Their ISINs were checked against the NSE and AMFI files. The demo prices are the **14-Oct-2026 closes** from NSE's
-  daily bhavcopy and AMFI's NAV file, committed as a small hand-filtered seed with the source recorded on every row.
+  Their ISINs were checked against the NSE and AMFI files. Prices come from **NSE's daily bhavcopy** (closing price)
+  and **AMFI's NAVAll.txt** (mutual-fund NAVs), read by real parsers. Offline, those parsers run over a committed
+  sample: the real files for 08-16 Oct 2026, filtered down to the demo instruments.
 - **3 clearly labelled synthetic private companies** (identifier prefix `ZZSYN`), valued by invented quarterly marks
   (fair-value Level 3), since real private holdings have no public prices.
 - **Synthetic** trades, positions, custodian files and reconciliation breaks: real ones are private, and reconciliation
   needs deliberately injected breaks to prove the matching engine.
 
-Every price carries its **source** (e.g. `NSE_BHAVCOPY`, `AMFI_NAV`, `SYNTHETIC`) and **data date**, and is flagged
-**stale** when it is older than the latest business day. A synthetic price is never used in place of a missing real
-one.
+Every price carries its **source** (e.g. `NSE_BHAVCOPY`, `AMFI_NAV`, `MFAPI`, `SYNTHETIC`) and **data date**, and is
+flagged **stale** when it is older than the latest business day. A synthetic price is never used in place of a missing
+real one: a thinly traded bond simply keeps its last real price, marked stale.
+
+### Data sources and terms
+
+| Source | Used for | How AlphaLedger uses it |
+|---|---|---|
+| [NSE](https://www.nseindia.com) CM bhavcopy (UDiFF) | Equities, REITs, InvITs, G-secs, bonds | NSE's [terms of use](https://www.nseindia.com/static/nse-terms-of-use) prohibit systematic or automated data collection. AlphaLedger never downloads from NSE on a schedule: files are saved by hand from a browser, and the repo holds only a filtered sample of 7 days |
+| [AMFI](https://www.amfiindia.com) NAVAll.txt | Mutual-fund NAVs | One public file a day, fetched once and cached; filtered sample committed |
+| [mfapi.in](https://www.mfapi.in) | Fallback for missing NAVs | Live mode only, at most 2 calls a second, behind a circuit breaker; no published terms found |
+| Synthetic marks | The 3 `ZZSYN` private companies | Invented quarterly marks, labelled Level 3 |
+
+Personal, non-commercial portfolio use only. No raw data files are committed; the full downloads stay in the
+git-ignored `data/market-cache/`. Market data stays subject to each provider's terms.
 
 ---
 
@@ -272,9 +285,9 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 |---|---|---|
 | Unit | Trade state machine, T+1 and holiday rules, holding checks, position math (average cost, realized P&L, exact cancels), valuation and exposure (three hand-calculated scenarios), token issuing and rotation, ISIN check digits, price validation the synthetic-price rule, reconciliation matching (every break type, tolerance boundaries) and the break workflow | JUnit 5, AssertJ, Mockito |
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
-| Smoke | 42 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
+| Smoke | 44 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **194 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **220 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 
@@ -284,9 +297,9 @@ Currently **194 automated tests**, all passing (`./mvnw verify`; integration tes
 |---|---|
 | `common/` | Shared library: event envelope and topics, error model, correlation IDs, JWT security, ISIN validation, business-day calendar |
 | `services/` | Spring Boot services: platform (`discovery-server`, `config-server`, `api-gateway`) and business services |
-| `reference-data/` | Committed reference data: instrument master (stable IDs), NSE holidays, synthetic marks, seed closes |
+| `reference-data/` | Committed reference data: instrument master (stable IDs), NSE holidays, synthetic marks, seed closes, filtered NSE/AMFI sample files |
 | `infra/` | Docker Compose stack, shared service Dockerfile, Postgres init, `.env.example` |
-| `scripts/` | Smoke test, demo trade loader, custodian file generator |
+| `scripts/` | Smoke test, demo trade loader, custodian file generator, market-data download and sample scripts |
 | `docs/` | PRD, architecture, roadmap, events, conventions, Postman collection |
 | `frontend/` | React dashboard (Phase 8) |
 
@@ -301,7 +314,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | Microservices with a database per service, Kafka between them | Mirrors real asset-management platforms; services evolve and scale independently |
 | Transactional outbox for events | A trade and its event commit atomically, so no event is lost and none is sent for a rolled-back trade |
 | v1 reports **Market Value**; full **NAV** comes in v1.5 | NAV needs cash and liabilities; calling market value "NAV" would be wrong |
-| Real public prices, synthetic transactions | Credible valuations with real data, while trade and custodian data stays synthetic |
+| Real public prices, synthetic transactions; no automated NSE downloads | Credible valuations with real data, while trade and custodian data stays synthetic; NSE's terms prohibit automated collection |
 | Rejected trades are stored, not just refused | The blotter and audit trail show every attempted trade, as in real trade capture |
 | Positions rebuilt from all their trades on every event | Cancels are exact even after later trades, and a duplicate event can never double-count |
 | Reconciliation matched in memory in one Spring Batch run, every break action audited | 10k rows in under 30 s; breaks, audit and events commit together |
@@ -325,5 +338,5 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 ## License and data
 
 Code: [MIT](LICENSE). This is a personal, non-commercial portfolio project. Market data comes from public sources
-(NSE, AMFI) and stays subject to their terms. The repository contains only a small hand-filtered sample, never raw
-data dumps. All trades, positions, custodian files and the 3 `ZZSYN` instruments are synthetic.
+(NSE, AMFI) and stays subject to their terms (see [Data sources and terms](#data-sources-and-terms)). The repository
+contains only a small filtered sample, never raw data dumps. All trades, positions, custodian files and the 3 `ZZSYN` instruments are synthetic.

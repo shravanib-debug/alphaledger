@@ -23,7 +23,7 @@ import com.alphaledger.common.calendar.MarketClock;
 
 /**
  * End-of-day valuation (architecture.md §5.4) as a Spring Batch job: one run per valuation date, recorded with its
- * status in the batch tables. Scheduled on business days after the day's prices are in (default 20:00 IST).
+ * status in the batch tables. Scheduled on business days after the day's prices are in (default 23:45 IST).
  */
 @Configuration
 public class ValuationJobConfig {
@@ -68,7 +68,7 @@ public class ValuationJobConfig {
             this.clock = clock;
         }
 
-        @Scheduled(cron = "${alphaledger.valuation.eod-cron:0 0 20 * * MON-FRI}", zone = "Asia/Kolkata")
+        @Scheduled(cron = "${alphaledger.valuation.eod-cron:0 45 23 * * MON-FRI}", zone = "Asia/Kolkata")
         public void scheduled() {
             LocalDate today = clock.today();
             if (calendar.isBusinessDay(today)) {

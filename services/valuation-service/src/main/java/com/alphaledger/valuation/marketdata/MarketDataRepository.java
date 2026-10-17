@@ -33,7 +33,7 @@ public class MarketDataRepository {
 
     private static final RowMapper<InstrumentRef> INSTRUMENT = (rs, i) -> new InstrumentRef(rs.getLong("instrument_id"),
             rs.getString("isin"), rs.getString("symbol"), rs.getString("name"), rs.getString("instrument_type"),
-            rs.getString("asset_class"), rs.getBoolean("is_synthetic"));
+            rs.getString("asset_class"), rs.getBoolean("is_synthetic"), rs.getString("amfi_scheme_code"));
 
     private final JdbcTemplate jdbc;
 

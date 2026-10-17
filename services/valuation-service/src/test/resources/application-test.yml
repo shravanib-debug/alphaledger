@@ -17,3 +17,4 @@ alphaledger:
   marketdata:
     mode: OFFLINE
     network-enabled: false
+    sample-enabled: false   # tests that need the offline sample switch it on

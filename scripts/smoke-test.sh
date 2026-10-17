@@ -153,6 +153,18 @@ if [[ "$synthetic" == *'"source":"SYNTHETIC"'* && "$synthetic" == *'"fairValueLe
 else
     echo "FAIL  synthetic instrument priced by an L3 mark: $synthetic"; failures=$((failures + 1))
 fi
+sample=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/marketdata/prices/latest?isin=INE002A01018")
+if [[ "$sample" == *'"source":"NSE_BHAVCOPY"'* && "$sample" == *'"dataDate":"2026-10-16"'* ]]; then
+    echo "PASS  bhavcopy parser ran over the offline sample (Reliance, 16-Oct)"
+else
+    echo "FAIL  bhavcopy parser ran over the offline sample: $sample"; failures=$((failures + 1))
+fi
+amfi=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/marketdata/ingestions?source=AMFI_NAV")
+if [[ "$amfi" == *'"file_name":"NAVAll_2026-10-16.txt"'* && "$amfi" == *'"rows_loaded":7'* ]]; then
+    echo "PASS  amfiNavIngestJob loaded the offline NAVAll sample (7 funds)"
+else
+    echo "FAIL  amfiNavIngestJob loaded the offline NAVAll sample: $amfi"; failures=$((failures + 1))
+fi
 upload_file="smoke-prices-$$.csv"   # relative path: native Windows curl cannot read Git Bash /tmp paths
 printf 'isin,data_date,price\nINE002A01018,2026-10-14,1174.60\n' > "$upload_file"
 expect_status "PM cannot upload prices (403)"   403 -X POST -H "Authorization: Bearer $PM_TOKEN" \

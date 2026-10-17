@@ -158,9 +158,9 @@ class MarketDataApiIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].status").value("SKIPPED_DUPLICATE"));
         mockMvc.perform(post("/api/v1/marketdata/ingestions").header("Authorization", ADMIN)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"NSE_BHAVCOPY\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"source\":\"YFINANCE\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("source: NSE_BHAVCOPY is not available yet"));
+                .andExpect(jsonPath("$.message").value("source: YFINANCE is not available"));
     }
 
     @Test

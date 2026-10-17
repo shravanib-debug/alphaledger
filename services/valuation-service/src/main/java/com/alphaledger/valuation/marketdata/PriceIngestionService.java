@@ -85,7 +85,7 @@ public class PriceIngestionService {
                     .filter(i -> !alreadyPricedByEarlierSource(i, source, dataDate))
                     .toList();
             if (!todo.isEmpty()) {
-                summaries.add(ingest(source.fetch(dataDate, todo)));
+                summaries.add(fetchAndIngest(source, dataDate, todo));
             }
         }
         return summaries;
@@ -94,7 +94,48 @@ public class PriceIngestionService {
     /** Runs a single source for its supported instruments (manual trigger). */
     public IngestionSummary runSource(PriceSource source, LocalDate dataDate) {
         List<InstrumentRef> supported = repository.instruments().stream().filter(source::supports).toList();
-        return ingest(source.fetch(dataDate, supported));
+        return fetchAndIngest(source, dataDate, supported);
+    }
+
+    /**
+     * Backfill: the daily fallback run (or one source) for every business day from {@code from} to {@code to}.
+     * Days already loaded are skipped by checksum, so a backfill can be repeated safely.
+     */
+    public List<IngestionSummary> backfill(PriceSource source, LocalDate from, LocalDate to) {
+        List<IngestionSummary> summaries = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            if (calendar.isBusinessDay(date)) {
+                if (source == null) {
+                    summaries.addAll(runDaily(date));
+                } else {
+                    summaries.add(runSource(source, date));
+                }
+            }
+        }
+        return summaries;
+    }
+
+    /**
+     * A source that cannot produce its file (holiday, not yet published, network off, header changed) is logged as
+     * FAILED with the reason; no price is written, so the last real price stays and is flagged stale.
+     */
+    private IngestionSummary fetchAndIngest(PriceSource source, LocalDate dataDate, List<InstrumentRef> instruments) {
+        PriceBatch batch;
+        try {
+            batch = source.fetch(dataDate, instruments);
+        } catch (RuntimeException ex) {
+            log.warn("Price source {} for {}: {}", source.name(), dataDate, ex.getMessage());
+            PriceBatch failed = new PriceBatch(source.name(), dataDate, null,
+                    MarketTime.sha256("failed|" + source.name() + "|" + dataDate + "|" + clock.now()), List.of(),
+                    List.of(), false, false);
+            Long id = transaction.execute(status -> {
+                long logId = repository.insertLog(failed, "FAILED", clock.now());
+                repository.completeLog(logId, "FAILED", 0, 0, 0, truncate(ex.getMessage()), clock.now());
+                return logId;
+            });
+            return new IngestionSummary(id == null ? -1 : id, source.name(), "FAILED", 0, 0, 0);
+        }
+        return ingest(batch);
     }
 
     private boolean alreadyPricedByEarlierSource(InstrumentRef instrument, PriceSource source, LocalDate dataDate) {

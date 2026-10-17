@@ -102,14 +102,14 @@ class PriceRulesTest {
     }
 
     private static PriceIngestionService service(MarketDataProperties.Mode mode) {
-        MarketDataProperties properties = new MarketDataProperties(mode, false, 5, Map.of(), true, false);
+        MarketDataProperties properties = MarketDataProperties.of(mode, false, Map.of());
         return new PriceIngestionService(mock(MarketDataRepository.class),
                 new PriceSourceRegistry(List.of(), properties), CALENDAR, CLOCK, properties,
                 mock(com.alphaledger.common.outbox.OutboxWriter.class), mock(PlatformTransactionManager.class));
     }
 
     private static MarketDataProperties properties(Map<String, List<PriceSourceName>> order) {
-        return new MarketDataProperties(MarketDataProperties.Mode.OFFLINE, false, 5, order, true, false);
+        return MarketDataProperties.of(MarketDataProperties.Mode.OFFLINE, false, order);
     }
 
     private static PriceRecord price(InstrumentRef instrument, PriceSourceName source, String date) {
