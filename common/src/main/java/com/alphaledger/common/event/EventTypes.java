@@ -10,6 +10,8 @@ public final class EventTypes {
     public static final String PRICE_UPDATED = "PRICE_UPDATED";
     public static final String VALUATION_CALCULATED = "VALUATION_CALCULATED";
     public static final String LIMIT_BREACHED = "LIMIT_BREACHED";
+    public static final String RECON_BREAK_CREATED = "RECON_BREAK_CREATED";
+    public static final String RECON_BREAK_RESOLVED = "RECON_BREAK_RESOLVED";
 
     /** Kafka record header carrying the correlation ID of the request that caused the event. */
     public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";

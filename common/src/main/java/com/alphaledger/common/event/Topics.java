@@ -10,6 +10,8 @@ public final class Topics {
     public static final String PRICE_UPDATED = "price.updated";
     public static final String VALUATION_CALCULATED = "valuation.calculated";
     public static final String LIMIT_BREACHED = "limit.breached";
+    public static final String RECON_BREAK_CREATED = "recon.break.created";
+    public static final String RECON_BREAK_RESOLVED = "recon.break.resolved";
 
     private Topics() {
     }

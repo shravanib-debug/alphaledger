@@ -15,6 +15,41 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: reconciliation-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+  batch:
+    job:
+      enabled: false             # runs start when a file is uploaded
+    jdbc:
+      initialize-schema: never   # Flyway creates the batch tables (V3)
+
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+  market:
+    zone: Asia/Kolkata
+  recon:
+    price-tolerance: 0.01      # INR; quantities must match exactly
+    sla-days: 3                # breaks open longer than this are flagged overdue
+  outbox:
+    relay:
+      poll-interval-ms: 500
 
 eureka:
   client:
