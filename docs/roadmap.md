@@ -18,7 +18,7 @@
 | 3 | Trade Capture | Trade Service, lifecycle, outbox, Kafka publish | ✅ |
 | 4A | Market Data Integration | Real NSE/AMFI prices via pluggable `PriceSource`, holiday calendar and T+1, real-ISIN instrument master, offline sample data | ✅ |
 | 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ✅ |
-| 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ⬜ |
+| 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ✅ (UI label with Phase 8) |
 | 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ✅ |
 | 6 | Notifications & Resilience | Notifications, DLQ, retries, circuit breakers | ⬜ |
 | 7 | Data Engineering & Analytics | Analytics ETL, star schema, DQ checks, views | ⬜ |
@@ -222,17 +222,17 @@
 
 **Goal:** Upgrade "market value" to a defensible NAV (`NAV = market value + cash − liabilities`). Recommended before the demo; can run in parallel with Phase 5.
 
-- [ ] Flyway migrations: `cash_balance`, `cash_transaction` (append-only), `liability`
-- [ ] valuation-service consumes `trade.settled` (idempotent): BUY reduces cash, SELL increases cash
-- [ ] Deposit/withdrawal endpoints (`/portfolios/{id}/cash`)
-- [ ] Liability CRUD endpoints (`/portfolios/{id}/liabilities`): accrued fees, expenses, payables, borrowings
-- [ ] Daily fee accrual job (e.g., `fee_rate × market_value / 365`) writing to `liability`
-- [ ] Compute `NAV = market value + cash − liabilities` and store components plus `valuation_basis = FULL_NAV`
-- [ ] Include NAV components in the valuation API response
-- [ ] **TDD:** unit tests for cash-only, liabilities-only, mixed, and liabilities-exceed-assets (negative NAV) cases
-- [ ] Verify three scenarios against a hand-built spreadsheet
-- [ ] Switch UI labels from "Market Value" to "NAV" (coordinate with Phase 8)
-- [ ] Document the formula and its limitations in the README
+- [x] Flyway migrations: `cash_balance`, `cash_transaction` (append-only), `liability`
+- [x] valuation-service consumes `trade.settled` (idempotent): BUY reduces cash, SELL increases cash
+- [x] Deposit/withdrawal endpoints (`/portfolios/{id}/cash`)
+- [x] Liability CRUD endpoints (`/portfolios/{id}/liabilities`): accrued fees, expenses, payables, borrowings
+- [x] Daily fee accrual job (e.g., `fee_rate × market_value / 365`) writing to `liability`
+- [x] Compute `NAV = market value + cash − liabilities` and store components plus `valuation_basis = FULL_NAV`
+- [x] Include NAV components in the valuation API response
+- [x] **TDD:** unit tests for cash-only, liabilities-only, mixed, and liabilities-exceed-assets (negative NAV) cases
+- [x] Verify three scenarios against a hand-built spreadsheet ([nav-scenarios.md](nav-scenarios.md))
+- [ ] Switch UI labels from "Market Value" to "NAV" (coordinate with Phase 8; the API already returns NAV and its components)
+- [x] Document the formula and its limitations in the README
 - [ ] Stretch: per-unit NAV (units outstanding), fair-value level tag, valuation override
 
 **DoD:** NAV on the dashboard equals market value + cash − liabilities for the seeded portfolios, and the breakdown of each component is visible.
@@ -475,3 +475,4 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-16 | 4 | Phase 4 complete. position-service: positions rebuilt from applied trades on every `trade.created`/`trade.cancelled` (weighted-average cost, realized P&L, exact cancels, trade-date order, SELL above holding skipped and recorded), idempotent consumer (`processed_event`), `position.updated` via outbox, positions/snapshots/exceptions endpoints, daily snapshot as a Spring Batch job. valuation-service: holdings copy from `position.updated` (newer update wins), live Market Value, unrealized/realized P&L and exposure by asset class and instrument with each line's price source/date/staleness, unpriced holdings reported not zero-valued, end-of-day Spring Batch job writing immutable `valuation_snapshot` + `exposure_snapshot` (basis MARKET_VALUE_ONLY, nav NULL), `valuation.calculated`, limit rules (portfolio overrides global) and once-per-day `limit.breached`, `price.updated` published on ingestion. Outbox/consumer helpers moved to common. DoD: three hand-calculated scenarios as unit tests; `scripts/demo-trades.sh` books 20 real-price trades. Smoke test 38/38. |
 | 2026-10-17 | 5 | Phase 5 complete. reconciliation-service: `trade.settled` consumed idempotently into `settled_trade_view`; multipart custodian upload (Admin/Ops) with header check, SHA-256 checksum and `UNIQUE(run_date, source, file_checksum)` so a re-upload returns the same run (200); raw file stored; Spring Batch job `reconciliationJob` (stage step: reader → row validator → batch writer, chunk 500; match step) with bad rows in `custodian_record_error`; hash-map matching engine on `trade_ref + isin + trade_date` (signed quantity exact, price tolerance ₹0.01 from config) detecting all four break types; run summary with per-type counts and match rate; break workflow OPEN → IN_REVIEW → ESCALATED/RESOLVED with mandatory comments, row locks, immutable `break_action_audit` (before/after JSON), ageing and SLA-overdue flag; `recon.break.created`/`recon.break.resolved` via outbox. PMs have no recon access. `scripts/generate-custodian-file.py` plants 3/3/4/4 breaks in the demo book. DoD met in `ReconciliationIT` (exactly 3/3/4/4; a break worked to resolution with 4 audit entries); 10k rows reconcile in under 30 s. Tests: 194 total; smoke test 42/42. |
 | 2026-10-17 | 4A | Phase 4A complete. Real files downloaded once (NSE bhavcopy 08-16 Oct 2026, AMFI NAVAll 16-Oct) and filtered to the demo ISINs into `reference-data/sample/nse|amfi` by `make-sample.sh`. `NseBhavcopyParser`/`NseBhavcopyPriceSource` (header check, `ClsPric`, block-deal `BL` rows ignored and `EQ` preferred, bad rows rejected), `AmfiNavPriceSource` as Spring Batch job `amfiNavIngestJob`, `MfApiPriceSource` fallback with Resilience4j circuit breaker and rate limiter (LIVE + network only), one guarded HTTP client, raw-file cache, FAILED log entry when a source has no file, backfill endpoint, OFFLINE startup runs the real parsers over the sample (every demo instrument gets a real 16-Oct price; the thinly traded PFC bond keeps its 14-Oct price, flagged stale). NSE's terms prohibit automated collection, so NSE files are never downloaded on a schedule (ADR 22); `download.sh` only fetches AMFI unless `NSE_MANUAL_FETCH=yes`. Daily price run moved to 23:30 IST (AMFI NAVs arrive by about 23:00), EOD valuation to 23:45. Test JVMs cannot reach external hosts. Tests: 220 total. |
+| 2026-10-26 | 4B | Phase 4B complete (backend). valuation-service V5: append-only `cash_transaction` ledger (trigger refuses UPDATE/DELETE; signed amounts with `effective_date`, so past cash is rebuilt), derived `cash_balance`, `liability` (MANAGEMENT_FEE/EXPENSE/PAYABLE/BORROWING; counts from accrual to payment). `trade.settled` consumed idempotently (by `eventId` and by `tradeRef`): BUY pays out, SELL pays in on the settle date. Cash deposit/withdrawal (withdrawal may not overdraw) and liability create/update/pay/delete endpoints (Admin/Ops); paying moves a liability to cash, a borrowing brings cash in and cannot be deleted. Daily management-fee accrual (1% a year default, `rate × market value / 365`, every calendar day at 23:40 IST, once per portfolio and day). NAV = market value + cash − liabilities in the valuation API (`cashBalance`, `totalLiabilities`, `nav`), snapshots and `valuation.calculated`, basis `FULL_NAV`; exposure and limits stay on market value. Three hand-calculated scenarios in `docs/nav-scenarios.md` asserted by `NavCalculatorTest`; `NavFlowIT` end to end. UI label switch waits for Phase 8. Tests: 233 total. |

@@ -15,6 +15,7 @@ import com.alphaledger.common.event.PositionEvent;
 import com.alphaledger.valuation.valuation.ValuationCalculator.Exposure;
 import com.alphaledger.valuation.valuation.ValuationCalculator.Holding;
 import com.alphaledger.valuation.valuation.ValuationCalculator.PortfolioValuation;
+import com.alphaledger.valuation.valuation.NavCalculator.Nav;
 
 @Repository
 public class ValuationRepository {
@@ -56,14 +57,15 @@ public class ValuationRepository {
     }
 
     /** Writes the day's snapshot once; returns false if one already exists for the portfolio and date. */
-    public boolean insertSnapshot(long portfolioId, LocalDate date, PortfolioValuation v, Instant now) {
+    public boolean insertSnapshot(long portfolioId, LocalDate date, PortfolioValuation v, Nav nav, Instant now) {
         int rows = jdbc.update("""
                 INSERT INTO valuation_snapshot (portfolio_id, as_of_date, market_value, total_cost, unrealized_pnl,
-                    realized_pnl, nav, valuation_basis, priced_positions, stale_positions, unpriced_positions, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, NULL, 'MARKET_VALUE_ONLY', ?, ?, ?, ?)
+                    realized_pnl, cash_balance, total_liabilities, nav, valuation_basis, priced_positions,
+                    stale_positions, unpriced_positions, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (portfolio_id, as_of_date) DO NOTHING
                 """, portfolioId, Date.valueOf(date), v.marketValue(), v.totalCost(), v.unrealizedPnl(), v.realizedPnl(),
-                v.pricedPositions(), v.stalePositions(), v.unpricedPositions(), Timestamp.from(now));
+                nav.cash(), nav.liabilities(), nav.nav(), nav.basis(), v.pricedPositions(), v.stalePositions(), v.unpricedPositions(), Timestamp.from(now));
         if (rows == 0) {
             return false;
         }
@@ -78,7 +80,8 @@ public class ValuationRepository {
 
     public List<Map<String, Object>> history(long portfolioId, LocalDate from, LocalDate to) {
         return jdbc.queryForList("""
-                SELECT as_of_date, market_value, total_cost, unrealized_pnl, realized_pnl, nav, valuation_basis,
+                SELECT as_of_date, market_value, cash_balance, total_liabilities, nav, valuation_basis, total_cost,
+                       unrealized_pnl, realized_pnl,
                        priced_positions, stale_positions, unpriced_positions
                 FROM valuation_snapshot WHERE portfolio_id = ? AND as_of_date BETWEEN ? AND ? ORDER BY as_of_date
                 """, portfolioId, Date.valueOf(from), Date.valueOf(to));

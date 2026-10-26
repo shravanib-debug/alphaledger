@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-220%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-233%20passing-success)
 
 ---
 
@@ -20,6 +20,7 @@ match the custodian's.**
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Data: real prices, synthetic transactions](#data-real-prices-synthetic-transactions)
+- [How NAV is calculated](#how-nav-is-calculated)
 - [Running locally](#running-locally)
 - [Trying the API](#trying-the-api)
 - [Testing](#testing)
@@ -39,7 +40,8 @@ match the custodian's.**
 | **Trade capture** | BUY/SELL trades in INR with **T+1 settlement on NSE business days**, a status lifecycle (NEW → VALIDATED → SETTLED, REJECTED, CANCELLED), a full audit trail, idempotent trade references, CSV bulk upload, automatic settlement | ✅ Built |
 | **Events** | Every change is published to **Kafka** through a transactional outbox: `trade.*`, `position.updated`, `price.updated`, `valuation.calculated`, `limit.breached`; consumers are idempotent | ✅ Built |
 | **Market data** | Pluggable price sources; **real NSE and AMFI closing prices** for listed instruments and mutual funds, synthetic Level 3 marks for private holdings; every price shows its source, date and whether it is stale | 🟨 Foundation built; live NSE/AMFI downloads later |
-| **Positions & valuation** | Holdings and weighted-average cost rebuilt from trade events (exact cancels, realized P&L); live Market Value, unrealized P&L and exposure by asset class and instrument, every line with its price source; end-of-day snapshots and asset-class limits with breach alerts. Full NAV (cash and liabilities) in v1.5 | ✅ Built |
+| **Positions & valuation** | Holdings and weighted-average cost rebuilt from trade events (exact cancels, realized P&L); live Market Value, unrealized P&L and exposure by asset class and instrument, every line with its price source; end-of-day snapshots and asset-class limits with breach alerts | ✅ Built |
+| **NAV** | NAV = market value + cash − liabilities, with each part shown. Cash comes from an append-only ledger (deposits, withdrawals, settled trades). Liabilities cover fees, expenses, payables and borrowings, plus a daily management-fee accrual | ✅ Built |
 | **Reconciliation** (signature feature) | Match a custodian file to settled trades on `trade ref + ISIN + trade date`; detect missing, quantity and price breaks; assign, resolve and escalate with an audit trail | ✅ Done |
 | **Notifications & resilience** | Alerts for breaks and limit breaches; retries, dead-letter topics, circuit breakers | ⬜ Planned |
 | **Analytics** | Warehouse-style star schema, data-quality checks, AUM and break-trend views | ⬜ Planned |
@@ -59,9 +61,9 @@ match the custodian's.**
 | 3 | Trade capture, lifecycle, outbox, Kafka events | ✅ |
 | 4A | Market data: NSE bhavcopy and AMFI NAV parsers, mfapi.in fallback, offline sample, NSE holiday calendar, T+1 | ✅ |
 | 4 | Positions and valuation (market value, P&L, exposure, limits) | ✅ |
-| 4B | NAV extension (cash, liabilities) | ⬜ Next |
+| 4B | NAV extension: cash ledger, liabilities, fee accrual, NAV | ✅ |
 | 5 | Reconciliation engine | ✅ |
-| 6 | Notifications and resilience | ⬜ |
+| 6 | Notifications and resilience | ⬜ Next |
 | 7 | Data engineering and analytics | ⬜ |
 | 8 | React frontend | ⬜ |
 | 9 | CI/CD, quality gates, observability | ⬜ |
@@ -112,7 +114,7 @@ flowchart LR
 | `auth-service` | 8081 | Users, roles, login, token refresh and revocation | ✅ |
 | `portfolio-service` | 8082 | Portfolios, funds, instrument master | ✅ |
 | `trade-service` | 8083 | Trade capture, validation, lifecycle, settlement, outbox | ✅ |
-| `valuation-service` | 8085 | Prices (source badges), Market Value, P&L, exposure, limits, end-of-day snapshots; NAV in v1.5 | ✅ |
+| `valuation-service` | 8085 | Prices (source badges), Market Value, P&L, exposure, limits, cash, liabilities, NAV, end-of-day snapshots | ✅ |
 | `position-service` | 8084 | Holdings, weighted-average cost, realized P&L, daily snapshots | ✅ |
 | `reconciliation-service` | 8086 | Custodian file ingest, matching, breaks | Done |
 | `notification-service` | 8087 | In-app and email notifications | Skeleton |
@@ -182,6 +184,22 @@ git-ignored `data/market-cache/`. Market data stays subject to each provider's t
 
 ---
 
+## How NAV is calculated
+
+```
+NAV = market value + cash − liabilities
+```
+
+- **Market value:** quantity × latest price for each holding. A holding with no price is reported as unpriced, not valued at zero.
+- **Cash:** the sum of an append-only ledger. A settled BUY pays `quantity × price` out on its settle date, and a settled SELL pays it in. Deposits, withdrawals and borrowings are also entries. Nothing is ever edited; a mistake is corrected with a new entry.
+- **Liabilities:** management fees, expenses, payables and borrowings, counted from their accrual date until they are paid. Paying one moves it from liabilities to cash, so NAV does not change. The management fee accrues every calendar day as `annual rate × market value / 365` (1% a year by default).
+- **Past dates:** cash and liabilities are rebuilt as they stood on that day, so `?asOf=` and the end-of-day snapshots are consistent.
+- NAV can be **negative** when liabilities exceed assets. It is reported as it is.
+
+Exposure and limits are still shares of market value. Three scenarios are worked out by hand in [docs/nav-scenarios.md](docs/nav-scenarios.md) and checked by unit tests.
+
+**Limitations:** single currency (INR); no per-unit NAV, receivables, accrued income, performance fees, capital calls or distributions. Payables for unsettled purchases are not created automatically; cash moves only when a trade settles. Illiquid holdings use their latest mark, not a fair-value model.
+
 ## Running locally
 
 Requires **JDK 21** and **Docker Desktop**. Maven is not needed: the Maven Wrapper downloads it.
@@ -247,14 +265,26 @@ curl -s -X POST localhost:8080/api/v1/trades -H "Authorization: Bearer $TOKEN" -
 # 4. Its latest price, with source, data date and staleness
 curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/api/v1/marketdata/prices/latest?isin=INE041025011"
 
-# 5. A few seconds later (trade -> Kafka -> position -> Kafka -> valuation): holdings, Market Value and exposure
+# 5. A few seconds later (trade -> Kafka -> position -> Kafka -> valuation): holdings, NAV and exposure
 curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/portfolios/2/positions
 curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/portfolios/2/valuation
 curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/portfolios/2/exposure
 ```
 
-The valuation is labelled **Market Value** with `valuationBasis: MARKET_VALUE_ONLY` and `nav: null`: true NAV needs
-cash and liabilities, which arrive in v1.5. Run `bash scripts/demo-trades.sh` to fill all three demo portfolios.
+The valuation returns `marketValue`, `cashBalance`, `totalLiabilities` and `nav` with `valuationBasis: FULL_NAV`.
+Cash moves when the trade settles (T+1, or Admin's manual settle). As Rohan (ops) or Anita (admin), record cash and
+liabilities:
+
+```bash
+OPS=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"rohan.ops@alphaledger.test","password":"Demo@AlphaLedger2026"}' | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+curl -s -X POST -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' \
+  localhost:8080/api/v1/portfolios/2/cash -d '{"type":"DEPOSIT","amount":500000}'
+curl -s -X POST -H "Authorization: Bearer $OPS" -H 'Content-Type: application/json' \
+  localhost:8080/api/v1/portfolios/2/liabilities -d '{"type":"EXPENSE","description":"Custody fee","amount":2500}'
+```
+
+Run `bash scripts/demo-trades.sh` to fill all three demo portfolios.
 
 Things worth trying:
 - **Rejection:** SELL more than you hold. The trade is stored as REJECTED with a reason.
@@ -287,7 +317,7 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
 | Smoke | 44 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **220 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **233 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 
@@ -313,7 +343,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 |---|---|
 | Microservices with a database per service, Kafka between them | Mirrors real asset-management platforms; services evolve and scale independently |
 | Transactional outbox for events | A trade and its event commit atomically, so no event is lost and none is sent for a rolled-back trade |
-| v1 reports **Market Value**; full **NAV** comes in v1.5 | NAV needs cash and liabilities; calling market value "NAV" would be wrong |
+| **NAV** = market value + cash − liabilities, from an append-only cash ledger | Market value alone is not NAV; a ledger gives an audit trail and lets any past date be rebuilt |
 | Real public prices, synthetic transactions; no automated NSE downloads | Credible valuations with real data, while trade and custodian data stays synthetic; NSE's terms prohibit automated collection |
 | Rejected trades are stored, not just refused | The blotter and audit trail show every attempted trade, as in real trade capture |
 | Positions rebuilt from all their trades on every event | Cancels are exact even after later trades, and a duplicate event can never double-count |
@@ -330,6 +360,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | [Product requirements](docs/prd.md) | Goals, personas, functional requirements, business rules, demo data plan |
 | [Architecture](docs/architecture.md) | Services, events, data pipelines, data model, APIs, security, ADRs |
 | [Roadmap](docs/roadmap.md) | Phase checklists, definitions of done, progress log |
+| [NAV scenarios](docs/nav-scenarios.md) | Three NAV calculations worked out by hand |
 | [Event schemas](docs/events.md) | Kafka envelope; trade, position, price, valuation and limit events |
 | [Conventions](docs/conventions.md) | Branching, commits, naming for packages, topics, endpoints, tables |
 

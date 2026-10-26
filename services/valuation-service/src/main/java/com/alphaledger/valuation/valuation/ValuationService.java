@@ -5,6 +5,8 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,32 +26,37 @@ import com.alphaledger.common.outbox.OutboxWriter;
 import com.alphaledger.valuation.marketdata.MarketDataRepository;
 import com.alphaledger.valuation.marketdata.PriceQueryService;
 import com.alphaledger.valuation.marketdata.PriceQueryService.LatestPrice;
+import com.alphaledger.valuation.nav.LedgerRepository;
+import com.alphaledger.valuation.valuation.NavCalculator.Nav;
 import com.alphaledger.valuation.valuation.ValuationCalculator.Exposure;
 import com.alphaledger.valuation.valuation.ValuationCalculator.Holding;
 import com.alphaledger.valuation.valuation.ValuationCalculator.PortfolioValuation;
 import com.alphaledger.valuation.valuation.ValuationCalculator.Quote;
 
 /**
- * Portfolio Market Value, P&L and exposure (FR-VAL-2 to FR-VAL-7). Live valuations are computed on request from the
+ * Portfolio Market Value, P&L, exposure (FR-VAL-2 to FR-VAL-7) and full NAV = market value + cash - liabilities
+ * (FR-VAL-10). Exposure and limits stay shares of market value. Live valuations are computed on request from the
  * latest positions and prices; the end-of-day run stores an immutable snapshot per portfolio, checks limits and
  * publishes {@code valuation.calculated} (and {@code limit.breached}).
  */
 @Service
 public class ValuationService {
 
-    public static final String BASIS = "MARKET_VALUE_ONLY";
+    public static final String BASIS = NavCalculator.FULL_NAV;
     private static final Logger log = LoggerFactory.getLogger(ValuationService.class);
 
     private final ValuationRepository repository;
+    private final LedgerRepository ledger;
     private final MarketDataRepository marketData;
     private final PriceQueryService prices;
     private final ProcessedEvents processedEvents;
     private final OutboxWriter outbox;
     private final MarketClock clock;
 
-    public ValuationService(ValuationRepository repository, MarketDataRepository marketData, PriceQueryService prices,
+    public ValuationService(ValuationRepository repository, LedgerRepository ledger, MarketDataRepository marketData, PriceQueryService prices,
                             ProcessedEvents processedEvents, OutboxWriter outbox, MarketClock clock) {
         this.repository = repository;
+        this.ledger = ledger;
         this.marketData = marketData;
         this.prices = prices;
         this.processedEvents = processedEvents;
@@ -81,6 +88,13 @@ public class ValuationService {
         return ValuationCalculator.value(holdings, quotes);
     }
 
+    /** NAV on {@code date}: cash and liabilities as they stood that day, added to {@code v}'s market value. */
+    @Transactional(readOnly = true)
+    public Nav nav(long portfolioId, LocalDate date, PortfolioValuation v) {
+        return NavCalculator.nav(v.marketValue(), ledger.cashAsOf(portfolioId, date),
+                ledger.liabilitiesAsOf(portfolioId, date));
+    }
+
     @Transactional(readOnly = true)
     public List<Map<String, Object>> history(long portfolioId, LocalDate from, LocalDate to) {
         LocalDate end = to == null ? clock.today() : to;
@@ -98,16 +112,19 @@ public class ValuationService {
     @Transactional
     public int runEndOfDay(LocalDate date) {
         int written = 0;
-        for (long portfolioId : repository.portfoliosWithPositions()) {
+        SortedSet<Long> portfolios = new TreeSet<>(repository.portfoliosWithPositions());
+        portfolios.addAll(ledger.portfoliosWithLedger());
+        for (long portfolioId : portfolios) {
             PortfolioValuation v = value(portfolioId, date);
-            if (!repository.insertSnapshot(portfolioId, date, v, clock.now())) {
+            Nav nav = nav(portfolioId, date, v);
+            if (!repository.insertSnapshot(portfolioId, date, v, nav, clock.now())) {
                 continue;
             }
             written++;
             outbox.append("Valuation", portfolioId + ":" + date, EventTypes.VALUATION_CALCULATED,
                     Topics.VALUATION_CALCULATED, String.valueOf(portfolioId),
                     new ValuationEvent(portfolioId, date, v.marketValue(), v.totalCost(), v.unrealizedPnl(),
-                            v.realizedPnl(), null, BASIS, v.stalePositions()));
+                            v.realizedPnl(), nav.nav(), BASIS, v.stalePositions()));
             checkLimits(portfolioId, date, v);
         }
         log.info("End-of-day valuation for {}: {} portfolio snapshots", date, written);

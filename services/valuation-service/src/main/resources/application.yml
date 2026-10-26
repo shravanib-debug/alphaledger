@@ -45,6 +45,8 @@ alphaledger:
     zone: Asia/Kolkata
   valuation:
     eod-cron: "0 45 23 * * MON-FRI"  # after the 23:30 daily price run
+    fee-accrual-cron: "0 40 23 * * *"  # every calendar day, just before the end-of-day valuation
+    management-fee-rate: 0.01          # annual; accrued daily as rate x market value / 365
   outbox:
     relay:
       poll-interval-ms: 500

@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.alphaledger.common.calendar.MarketClock;
 import com.alphaledger.common.error.NotFoundException;
+import com.alphaledger.valuation.valuation.NavCalculator.Nav;
 import com.alphaledger.valuation.valuation.ValuationCalculator.Exposure;
 import com.alphaledger.valuation.valuation.ValuationCalculator.PortfolioValuation;
 import com.alphaledger.valuation.valuation.ValuationJobConfig.EndOfDayValuation;
@@ -31,7 +32,7 @@ import com.alphaledger.valuation.valuation.ValuationRepository;
 import com.alphaledger.valuation.valuation.ValuationService;
 
 /**
- * Portfolio valuation: labelled Market Value, never NAV, in v1 (prd.md §4.5). Any signed-in role can read; Admin
+ * Portfolio valuation: NAV = market value + cash - liabilities, with each component shown (FR-VAL-10). Any signed-in role can read; Admin
  * manages limit rules and can run the end-of-day valuation for a date.
  */
 @RestController
@@ -51,7 +52,8 @@ public class ValuationController {
     }
 
     public record ValuationResponse(long portfolioId, LocalDate asOfDate, String valuationBasis, BigDecimal marketValue,
-                                    BigDecimal nav, PortfolioValuation details) {
+                                    BigDecimal cashBalance, BigDecimal totalLiabilities, BigDecimal nav,
+                                    PortfolioValuation details) {
     }
 
     /** Live valuation from the latest positions and prices; each line shows its price source, date and staleness. */
@@ -61,7 +63,9 @@ public class ValuationController {
                                        LocalDate asOf) {
         LocalDate date = asOf == null ? clock.today() : asOf;
         PortfolioValuation v = valuations.value(portfolioId, date);
-        return new ValuationResponse(portfolioId, date, ValuationService.BASIS, v.marketValue(), null, v);
+        Nav nav = valuations.nav(portfolioId, date, v);
+        return new ValuationResponse(portfolioId, date, nav.basis(), nav.marketValue(), nav.cash(), nav.liabilities(),
+                nav.nav(), v);
     }
 
     @GetMapping("/api/v1/portfolios/{portfolioId}/valuation/history")

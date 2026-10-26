@@ -344,6 +344,15 @@ alphaledger:
 - Daily accrual job, e.g. `management_fee_accrual = fee_rate × market_value / 365`, written to `liability`.
 - `cash_transaction` is an append-only ledger; `cash_balance` is derived from it.
 
+**As built (Phase 4B):**
+- Ledger entry types: `DEPOSIT`, `WITHDRAWAL`, `TRADE_BUY`, `TRADE_SELL`, `BORROWING`, `LIABILITY_PAYMENT`. Amounts are signed. A database trigger refuses `UPDATE` and `DELETE`. Each entry has an `effective_date` (settle date for trades), so cash on any past date is rebuilt from the ledger.
+- A settlement is recorded once per `tradeRef` (partial unique index), as well as once per `eventId`.
+- Liabilities (`MANAGEMENT_FEE`, `EXPENSE`, `PAYABLE`, `BORROWING`) count from `accrual_date` until `paid_date`. Paying one takes its amount out of cash, so NAV does not change. Recording a borrowing brings its amount into cash. Borrowings cannot be deleted or have their amount changed; they are repaid.
+- A withdrawal may not take cash below zero. A settled BUY may, because it is a fact (an overdraft).
+- The fee accrual runs every calendar day at 23:40 IST, before the 23:45 end-of-day valuation, at `alphaledger.valuation.management-fee-rate` (default 1% a year). It writes one row per portfolio and day.
+- Exposure and limits stay shares of **market value**, not NAV.
+- Hand-checked scenarios: [nav-scenarios.md](nav-scenarios.md).
+
 **Known limitations (documented, out of scope):** per-unit NAV, performance fee/carry waterfalls, capital calls and distributions, FX, and model-based valuation of illiquid holdings (fair-value levels L1/L2/L3).
 
 ### 5.5 Pipeline 4: Reconciliation batch pipeline (core)

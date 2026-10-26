@@ -71,7 +71,7 @@ Example (`trade.created`, key `"2"`):
 }
 ```
 
-Consumers: position-service (`trade.created`, `trade.cancelled`); from Phase 5 reconciliation-service (`trade.settled`); in v1.5 valuation-service (`trade.settled`, cash).
+Consumers: position-service (`trade.created`, `trade.cancelled`); from Phase 5 reconciliation-service (`trade.settled`); from Phase 4B valuation-service (`trade.settled`, cash; idempotent by `eventId` and by `tradeRef`).
 
 ## Position events (producer: position-service)
 
@@ -95,7 +95,7 @@ Consumer: valuation-service.
 | Topic | `eventType` | Key | Emitted when | Payload |
 |---|---|---|---|---|
 | `price.updated` | `PRICE_UPDATED` | `instrumentId` | A price is loaded (seed, upload, synthetic marks or ticks, daily run) | `instrumentId`, `isin`, `price`, `currency`, `dataDate`, `asOf`, `source` |
-| `valuation.calculated` | `VALUATION_CALCULATED` | `portfolioId` | The end-of-day run writes a portfolio's snapshot | `portfolioId`, `asOfDate`, `marketValue`, `totalCost`, `unrealizedPnl`, `realizedPnl`, `nav` (null in v1), `valuationBasis` (`MARKET_VALUE_ONLY`), `stalePositions` |
+| `valuation.calculated` | `VALUATION_CALCULATED` | `portfolioId` | The end-of-day run writes a portfolio's snapshot | `portfolioId`, `asOfDate`, `marketValue`, `totalCost`, `unrealizedPnl`, `realizedPnl`, `nav` (market value + cash − liabilities; null only under the v1 basis), `valuationBasis` (`FULL_NAV` from v1.5; `MARKET_VALUE_ONLY` in v1), `stalePositions` |
 | `limit.breached` | `LIMIT_BREACHED` | `portfolioId` | An asset class's share of market value exceeds its limit (once per portfolio, asset class and day) | `portfolioId`, `assetClass`, `exposurePct`, `maxPct`, `marketValue`, `asOfDate` |
 
 Consumers (planned): notification-service (`limit.breached`, Phase 6), analytics (`valuation.calculated`, Phase 7).

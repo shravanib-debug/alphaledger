@@ -98,8 +98,10 @@ class ValuationFlowIT {
 
         mockMvc.perform(get("/api/v1/portfolios/2/valuation").header("Authorization", AUDITOR))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.valuationBasis").value("MARKET_VALUE_ONLY"))
-                .andExpect(jsonPath("$.nav").doesNotExist())
+                .andExpect(jsonPath("$.valuationBasis").value("FULL_NAV"))
+                .andExpect(jsonPath("$.cashBalance").value(0.00))   // no cash or liabilities: NAV = market value
+                .andExpect(jsonPath("$.totalLiabilities").value(0.00))
+                .andExpect(jsonPath("$.nav").value(385745.00))
                 .andExpect(jsonPath("$.asOfDate").value("2026-10-15"))
                 .andExpect(jsonPath("$.marketValue").value(385745.00))
                 .andExpect(jsonPath("$.details.unrealizedPnl").value(10745.00))
@@ -131,8 +133,8 @@ class ValuationFlowIT {
                         .header("Authorization", AUDITOR))
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].market_value").value(385745.00))
-                .andExpect(jsonPath("$[0].valuation_basis").value("MARKET_VALUE_ONLY"))
-                .andExpect(jsonPath("$[0].nav").doesNotExist());
+                .andExpect(jsonPath("$[0].valuation_basis").value("FULL_NAV"))
+                .andExpect(jsonPath("$[0].nav").value(385745.00));
         mockMvc.perform(get("/api/v1/valuations/limit-breaches").param("portfolioId", "2")
                         .header("Authorization", AUDITOR))
                 .andExpect(jsonPath("$.length()").value(1))
@@ -141,7 +143,7 @@ class ValuationFlowIT {
         ConsumerRecord<String, String> valuation = awaitRecord(Topics.VALUATION_CALCULATED,
                 v -> JsonPath.<Integer>read(v, "$.payload.portfolioId") == 2);
         assertThat(valuation.key()).isEqualTo("2");
-        assertThat((Object) JsonPath.read(valuation.value(), "$.payload.valuationBasis")).isEqualTo("MARKET_VALUE_ONLY");
+        assertThat((Object) JsonPath.read(valuation.value(), "$.payload.valuationBasis")).isEqualTo("FULL_NAV");
         ConsumerRecord<String, String> breach = awaitRecord(Topics.LIMIT_BREACHED,
                 v -> JsonPath.<Integer>read(v, "$.payload.portfolioId") == 2);
         assertThat((Object) JsonPath.read(breach.value(), "$.payload.assetClass")).isEqualTo("REAL_ESTATE");

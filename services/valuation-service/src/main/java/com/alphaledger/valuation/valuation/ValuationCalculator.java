@@ -16,7 +16,7 @@ import java.util.Map;
  * <li>unrealized P&L = market value - quantity x average cost; realized P&L comes from position-service;</li>
  * <li>exposure = each asset class's (and instrument's) share of market value.</li>
  * </ul>
- * This is not NAV: cash and liabilities arrive in v1.5. A holding without any price is reported as unpriced and left
+ * This is market value, not NAV: {@link NavCalculator} adds cash and liabilities. A holding without any price is reported as unpriced and left
  * out of the totals rather than valued at zero; stale prices are used and counted.
  */
 public final class ValuationCalculator {

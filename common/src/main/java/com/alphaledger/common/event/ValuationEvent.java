@@ -4,8 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * Payload of {@code valuation.calculated} (docs/events.md, version 1). In v1 {@code valuationBasis} is
- * MARKET_VALUE_ONLY and {@code nav} is null: market value is not NAV (prd.md business rule 2).
+ * Payload of {@code valuation.calculated} (docs/events.md, version 1). From v1.5 {@code valuationBasis} is FULL_NAV
+ * and {@code nav} = market value + cash - liabilities; with MARKET_VALUE_ONLY (v1) {@code nav} is null.
  */
 public record ValuationEvent(
         long portfolioId,
