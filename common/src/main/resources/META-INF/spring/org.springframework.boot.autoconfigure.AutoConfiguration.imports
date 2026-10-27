@@ -1,3 +1,4 @@
 com.alphaledger.common.autoconfigure.CommonWebAutoConfiguration
 com.alphaledger.common.autoconfigure.ServletSecurityAutoConfiguration
 com.alphaledger.common.autoconfigure.OpenApiAutoConfiguration
+com.alphaledger.common.autoconfigure.KafkaResilienceAutoConfiguration

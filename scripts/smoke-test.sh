@@ -194,11 +194,12 @@ await_json "trade became a position (Kafka -> position-service)" \
 await_json "position reached valuation (Kafka -> valuation-service)" \
     "$GATEWAY/api/v1/portfolios/2/valuation" '"priceSource":"NSE_BHAVCOPY"'
 valuation=$(curl -sS -H "Authorization: Bearer $AUDITOR_TOKEN" "$GATEWAY/api/v1/portfolios/2/valuation")
-if [[ "$valuation" == *'"valuationBasis":"MARKET_VALUE_ONLY"'* && "$valuation" == *'"nav":null'* ]]; then
-    echo "PASS  valuation labelled Market Value, not NAV"
+if [[ "$valuation" == *'"valuationBasis":"FULL_NAV"'* && "$valuation" == *'"cashBalance":'*       && "$valuation" == *'"totalLiabilities":'* && "$valuation" != *'"nav":null'* ]]; then
+    echo "PASS  valuation reports NAV with cash and liabilities"
 else
-    echo "FAIL  valuation labelled Market Value, not NAV"; failures=$((failures + 1))
+    echo "FAIL  valuation reports NAV with cash and liabilities"; failures=$((failures + 1))
 fi
+expect_status "PM cannot record cash (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN"     -H 'Content-Type: application/json' -d '{"type":"DEPOSIT","amount":1}' "$GATEWAY/api/v1/portfolios/2/cash"
 expect_status "exposure by asset class (200)"   200 -H "Authorization: Bearer $AUDITOR_TOKEN" \
     "$GATEWAY/api/v1/portfolios/2/exposure"
 expect_status "PM cannot set limit rules (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN" \
@@ -220,6 +221,15 @@ fi
 expect_status "PM cannot upload custodian files (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN"     -F "file=@$recon_file;filename=custodian.csv" "$GATEWAY/api/v1/recon/runs?runDate=2026-10-14"
 rm -f "$recon_file"
 expect_status "auditor can read breaks (200)"   200 -H "Authorization: Bearer $AUDITOR_TOKEN"     "$GATEWAY/api/v1/recon/breaks"
+
+# ---------- Phase 6: notifications and resilience ----------
+check "notification-service registered"       "$EUREKA/eureka/apps/NOTIFICATION-SERVICE" '"NOTIFICATION-SERVICE"'
+await_json "recon break notified (Kafka -> notification-service)"     "$GATEWAY/api/v1/notifications" "SMOKE-CUST-$$"
+expect_status "ops can read notifications (200)" 200 -H "Authorization: Bearer $OPS_TOKEN"     "$GATEWAY/api/v1/notifications/unread-count"
+expect_status "ops cannot read dead letters (403)" 403 -H "Authorization: Bearer $OPS_TOKEN"     "$GATEWAY/api/v1/ops/dead-letters"
+ADMIN_TOKEN=$(login anita.admin@alphaledger.test)
+expect_status "admin can read dead letters (200)" 200 -H "Authorization: Bearer $ADMIN_TOKEN"     "$GATEWAY/api/v1/ops/dead-letters/limit.breached"
+check "MailHog received the break email"      "http://localhost:8025/api/v2/messages" "SMOKE-CUST-$$"
 
 if (( failures > 0 )); then
     echo "$failures check(s) failed"

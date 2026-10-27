@@ -20,7 +20,7 @@
 | 4 | Positions & Valuation | Position consumer, prices, market value, P&L, exposure | ✅ |
 | 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ✅ (UI label with Phase 8) |
 | 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ✅ |
-| 6 | Notifications & Resilience | Notifications, DLQ, retries, circuit breakers | ⬜ |
+| 6 | Notifications & Resilience | Notifications, DLQ, retries, circuit breakers | ✅ |
 | 7 | Data Engineering & Analytics | Analytics ETL, star schema, DQ checks, views | ⬜ |
 | 8 | Frontend (React) | Dashboard, blotter, positions, recon UI | ⬜ |
 | 9 | CI/CD, Quality & Observability | Pipelines, coverage gate, Sonar, monitoring | ⬜ |
@@ -283,20 +283,20 @@
 **Goal:** Make the system communicate and survive failures.
 
 ### Notification Service
-- [ ] Notification entity and API (list, mark read)
-- [ ] Consume `recon.break.created` and `limit.breached`
-- [ ] Idempotent consumer
-- [ ] Email notifications via MailHog (P1)
-- [ ] Daily open-breaks digest (P2)
+- [x] Notification entity and API (list, mark read)
+- [x] Consume `recon.break.created` and `limit.breached`
+- [x] Idempotent consumer
+- [x] Email notifications via MailHog (P1)
+- [x] Daily open-breaks digest (P2)
 
 ### Resilience
-- [ ] Spring Kafka `DefaultErrorHandler` with exponential backoff on all consumers
-- [ ] Dead-letter topics for every consumed topic
-- [ ] Endpoint or script to replay DLQ messages
-- [ ] Resilience4j circuit breaker/retry on gateway routes and any REST calls
-- [ ] Rate limiting at the gateway (P2)
-- [ ] Failure-injection tests (kill a consumer, send a poison message, verify recovery)
-- [ ] Correlation ID propagated through HTTP and Kafka headers
+- [x] Spring Kafka `DefaultErrorHandler` with exponential backoff on all consumers
+- [x] Dead-letter topics for every consumed topic
+- [x] Endpoint or script to replay DLQ messages
+- [x] Resilience4j circuit breaker/retry on gateway routes and any REST calls
+- [x] Rate limiting at the gateway (P2)
+- [x] Failure-injection tests (kill a consumer, send a poison message, verify recovery)
+- [x] Correlation ID propagated through HTTP and Kafka headers
 
 **DoD:** A poison message lands in a DLQ without blocking the consumer; stopping and restarting a service loses no events.
 
@@ -476,3 +476,4 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-17 | 5 | Phase 5 complete. reconciliation-service: `trade.settled` consumed idempotently into `settled_trade_view`; multipart custodian upload (Admin/Ops) with header check, SHA-256 checksum and `UNIQUE(run_date, source, file_checksum)` so a re-upload returns the same run (200); raw file stored; Spring Batch job `reconciliationJob` (stage step: reader → row validator → batch writer, chunk 500; match step) with bad rows in `custodian_record_error`; hash-map matching engine on `trade_ref + isin + trade_date` (signed quantity exact, price tolerance ₹0.01 from config) detecting all four break types; run summary with per-type counts and match rate; break workflow OPEN → IN_REVIEW → ESCALATED/RESOLVED with mandatory comments, row locks, immutable `break_action_audit` (before/after JSON), ageing and SLA-overdue flag; `recon.break.created`/`recon.break.resolved` via outbox. PMs have no recon access. `scripts/generate-custodian-file.py` plants 3/3/4/4 breaks in the demo book. DoD met in `ReconciliationIT` (exactly 3/3/4/4; a break worked to resolution with 4 audit entries); 10k rows reconcile in under 30 s. Tests: 194 total; smoke test 42/42. |
 | 2026-10-17 | 4A | Phase 4A complete. Real files downloaded once (NSE bhavcopy 08-16 Oct 2026, AMFI NAVAll 16-Oct) and filtered to the demo ISINs into `reference-data/sample/nse|amfi` by `make-sample.sh`. `NseBhavcopyParser`/`NseBhavcopyPriceSource` (header check, `ClsPric`, block-deal `BL` rows ignored and `EQ` preferred, bad rows rejected), `AmfiNavPriceSource` as Spring Batch job `amfiNavIngestJob`, `MfApiPriceSource` fallback with Resilience4j circuit breaker and rate limiter (LIVE + network only), one guarded HTTP client, raw-file cache, FAILED log entry when a source has no file, backfill endpoint, OFFLINE startup runs the real parsers over the sample (every demo instrument gets a real 16-Oct price; the thinly traded PFC bond keeps its 14-Oct price, flagged stale). NSE's terms prohibit automated collection, so NSE files are never downloaded on a schedule (ADR 22); `download.sh` only fetches AMFI unless `NSE_MANUAL_FETCH=yes`. Daily price run moved to 23:30 IST (AMFI NAVs arrive by about 23:00), EOD valuation to 23:45. Test JVMs cannot reach external hosts. Tests: 220 total. |
 | 2026-10-26 | 4B | Phase 4B complete (backend). valuation-service V5: append-only `cash_transaction` ledger (trigger refuses UPDATE/DELETE; signed amounts with `effective_date`, so past cash is rebuilt), derived `cash_balance`, `liability` (MANAGEMENT_FEE/EXPENSE/PAYABLE/BORROWING; counts from accrual to payment). `trade.settled` consumed idempotently (by `eventId` and by `tradeRef`): BUY pays out, SELL pays in on the settle date. Cash deposit/withdrawal (withdrawal may not overdraw) and liability create/update/pay/delete endpoints (Admin/Ops); paying moves a liability to cash, a borrowing brings cash in and cannot be deleted. Daily management-fee accrual (1% a year default, `rate × market value / 365`, every calendar day at 23:40 IST, once per portfolio and day). NAV = market value + cash − liabilities in the valuation API (`cashBalance`, `totalLiabilities`, `nav`), snapshots and `valuation.calculated`, basis `FULL_NAV`; exposure and limits stay on market value. Three hand-calculated scenarios in `docs/nav-scenarios.md` asserted by `NavCalculatorTest`; `NavFlowIT` end to end. UI label switch waits for Phase 8. Tests: 233 total. |
+| 2026-10-27 | 6 | Phase 6 complete. common `KafkaResilienceAutoConfiguration` (on in every service with a consumer group): `DefaultErrorHandler` with exponential backoff (3 retries), then `<topic>.DLT` (same key, exception headers) so a poison record never blocks a partition; unreadable records (bad JSON, missing payload: `InvalidEventException`) skip retries; DLT topics created on startup; record interceptor puts the Kafka `X-Correlation-Id` header into the MDC; `DeadLetterReplayer` (list/replay, progress kept as a consumer group). notification-service: notifications per audience role (breaks -> Ops, limit breaches -> PMs; Admin/Auditor see all), per-user read state, unread count, mark read/all, idempotent consumers, email via MailHog queued in the database and sent by a poller with retries, daily open-breaks digest from `recon.break.created`/`resolved`, Admin dead-letter API `/api/v1/ops/dead-letters`. Gateway: per-route Resilience4j circuit breaker with JSON 503 fallback, GET retries, per-user token-bucket rate limit (429). trade-service -> portfolio-service: retry inside a circuit breaker, 4xx not retried. Failure-injection ITs: poison messages dead-lettered while the next event is processed, replay, consumer stopped and restarted without loss. notification-service added to docker-compose; smoke test now checks NAV, notifications, dead letters and MailHog. Tests: 249 total. |

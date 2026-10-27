@@ -1,0 +1,22 @@
+# Test profile: no config server or Eureka; Postgres, Kafka and MailHog come from Testcontainers.
+spring:
+  cloud:
+    config:
+      enabled: false
+eureka:
+  client:
+    enabled: false
+
+alphaledger:
+  security:
+    jwt:
+      secret: dGVzdC1vbmx5LXNlY3JldC10ZXN0LW9ubHktc2VjcmV0LTEyMzQ1Ng==
+  kafka:
+    retry:
+      max-retries: 2
+      initial-interval: 100ms
+      max-interval: 200ms
+  notification:
+    email:
+      poll-interval-ms: 300
+    digest-cron: "-"   # tests build the digest on request

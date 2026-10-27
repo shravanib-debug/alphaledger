@@ -214,10 +214,14 @@ src/main/java/com/alphaledger/<service>/
 |---|---|---|
 | **Transactional Outbox** | trade-service, reconciliation-service | Write business row + `outbox_event` row in one DB transaction; a poller/relay publishes to Kafka and marks sent. |
 | **Idempotent consumer** | position-service, valuation-service, notification-service | `processed_event(event_id)` table checked before processing. |
-| **Retry with backoff** | all consumers | Spring Kafka `DefaultErrorHandler` with exponential backoff. |
-| **Dead-letter topic** | all consumers | After N retries, message goes to `<topic>.DLT` with error headers. |
-| **Circuit breaker** | gateway → services, REST calls | Resilience4j. |
+| **Retry with backoff** | all consumers | Spring Kafka `DefaultErrorHandler` with exponential backoff (default 3 retries: 0.5 s, 1 s, 2 s; `alphaledger.kafka.retry.*`). Unreadable records (bad JSON, missing payload) skip the retries. |
+| **Dead-letter topic** | all consumers | After the retries, the record goes to `<topic>.DLT` (same key; exception in `kafka_dlt-*` headers) and the consumer moves on, so one bad record never blocks a partition. Admin lists and replays them with `GET/POST /api/v1/ops/dead-letters/{topic}[/replay]` (replay progress is a consumer group, so each record is replayed once). |
+| **Circuit breaker** | gateway → services; trade-service → portfolio-service | Gateway: one Resilience4j breaker per route (opens at 50% failures over the last 20 calls, open 10 s, 30 s time limit) with a JSON 503 fallback; GET requests retried twice. trade-service: retry (3 attempts) inside a breaker; 4xx answers are neither retried nor counted. |
+| **Rate limiting** | gateway | In-memory token bucket per user (or IP before login): burst 100, 20/s; 429 with `Retry-After`. Per gateway instance; several instances would need a shared store such as Redis. |
+| **Correlation ID** | HTTP and Kafka | Gateway sets `X-Correlation-Id`; services log it (MDC) and forward it on REST calls; the outbox relay puts it in a Kafka header; a record interceptor puts it back in the consumer's MDC. |
 | **Ordering** | per portfolio | Partition key = `portfolioId`. |
+
+All Kafka consumer resilience lives in `common` (`KafkaResilienceAutoConfiguration`) and switches on in any service that sets `spring.kafka.consumer.group-id`.
 
 ---
 

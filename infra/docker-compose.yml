@@ -290,5 +290,35 @@ services:
       config-server:
         condition: service_healthy
 
+  notification-service:
+    <<: *java-service
+    build:
+      context: ..
+      dockerfile: infra/docker/service.Dockerfile
+      args:
+        MODULE: notification-service
+    environment:
+      <<: *java-env
+      SERVER_PORT: 8080
+      DB_HOST: postgres
+      DB_USER: ${POSTGRES_USER:-alphaledger}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-alphaledger}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+    ports:
+      - "8087:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+      discovery-server:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+
 volumes:
   postgres-data:

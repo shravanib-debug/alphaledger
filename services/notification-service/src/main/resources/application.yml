@@ -15,6 +15,43 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+  mail:
+    host: ${MAIL_HOST:localhost}   # MailHog locally (infra/docker-compose.yml); web UI on :8025
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 3000
+      mail.smtp.timeout: 3000
+      mail.smtp.writetimeout: 3000
+
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+  notification:
+    email:
+      enabled: ${NOTIFICATION_EMAIL_ENABLED:true}
+      from: alerts@alphaledger.test
+      max-attempts: 5
+      poll-interval-ms: 5000
+    digest-cron: "0 0 9 * * MON-FRI"   # open-breaks digest, 09:00 IST
+    # Who is emailed for each audience role (demo users; see README).
+    recipients:
+      OPS_ANALYST: [rohan.ops@alphaledger.test]
+      PM: [priya.pm@alphaledger.test]
+      ADMIN: [anita.admin@alphaledger.test]
 
 eureka:
   client:

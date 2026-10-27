@@ -98,7 +98,7 @@ Consumer: valuation-service.
 | `valuation.calculated` | `VALUATION_CALCULATED` | `portfolioId` | The end-of-day run writes a portfolio's snapshot | `portfolioId`, `asOfDate`, `marketValue`, `totalCost`, `unrealizedPnl`, `realizedPnl`, `nav` (market value + cash − liabilities; null only under the v1 basis), `valuationBasis` (`FULL_NAV` from v1.5; `MARKET_VALUE_ONLY` in v1), `stalePositions` |
 | `limit.breached` | `LIMIT_BREACHED` | `portfolioId` | An asset class's share of market value exceeds its limit (once per portfolio, asset class and day) | `portfolioId`, `assetClass`, `exposurePct`, `maxPct`, `marketValue`, `asOfDate` |
 
-Consumers (planned): notification-service (`limit.breached`, Phase 6), analytics (`valuation.calculated`, Phase 7).
+Consumers: notification-service (`limit.breached`, Phase 6); planned: analytics (`valuation.calculated`, Phase 7).
 
 ## Reconciliation events (producer: reconciliation-service)
 
@@ -107,4 +107,8 @@ Consumers (planned): notification-service (`limit.breached`, Phase 6), analytics
 | `recon.break.created` | `RECON_BREAK_CREATED` | `runId` | A run finds a break (one event per break) | `breakId`, `runId`, `breakType`, `tradeRef`, `isin`, `tradeDate`, `portfolioId` (null for `MISSING_INTERNAL`), `internalQuantity`, `externalQuantity`, `internalPrice`, `externalPrice`, `status`, `resolutionType` (null), `assignedTo` |
 | `recon.break.resolved` | `RECON_BREAK_RESOLVED` | `breakId` | A break is resolved | Same payload, with `status` `RESOLVED` and `resolutionType` set |
 
-Quantities are signed (SELL negative). reconciliation-service consumes `trade.settled` (group `reconciliation-service`, idempotent by `eventId`). Consumers (planned): notification-service (`recon.break.created`, Phase 6), analytics (both, Phase 7).
+Quantities are signed (SELL negative). reconciliation-service consumes `trade.settled` (group `reconciliation-service`, idempotent by `eventId`). Consumers: notification-service (`recon.break.created` and `recon.break.resolved`, group `notification-service`, idempotent by `eventId`); planned: analytics (both, Phase 7).
+
+## Dead-letter topics
+
+Every consumed topic has `<topic>.DLT` (3 partitions), created on startup by any consuming service. A record that still fails after the retries, or cannot be read, is published there with the same key and value plus Spring Kafka's `kafka_dlt-original-topic`, `kafka_dlt-exception-message` and related headers. A replay (`POST /api/v1/ops/dead-letters/{topic}/replay`, Admin) republishes it to the original topic without the `kafka_dlt-*` headers and with `alphaledger-replayed-from`; consumers are idempotent, so a replayed event that had in fact been processed is skipped.

@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-233%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-249%20passing-success)
 
 ---
 
@@ -43,7 +43,7 @@ match the custodian's.**
 | **Positions & valuation** | Holdings and weighted-average cost rebuilt from trade events (exact cancels, realized P&L); live Market Value, unrealized P&L and exposure by asset class and instrument, every line with its price source; end-of-day snapshots and asset-class limits with breach alerts | ✅ Built |
 | **NAV** | NAV = market value + cash − liabilities, with each part shown. Cash comes from an append-only ledger (deposits, withdrawals, settled trades). Liabilities cover fees, expenses, payables and borrowings, plus a daily management-fee accrual | ✅ Built |
 | **Reconciliation** (signature feature) | Match a custodian file to settled trades on `trade ref + ISIN + trade date`; detect missing, quantity and price breaks; assign, resolve and escalate with an audit trail | ✅ Done |
-| **Notifications & resilience** | Alerts for breaks and limit breaches; retries, dead-letter topics, circuit breakers | ⬜ Planned |
+| **Notifications & resilience** | In-app and email alerts (MailHog) for reconciliation breaks (Ops) and limit breaches (PMs), with per-user read state and a daily open-breaks digest. Every Kafka consumer retries with backoff, then dead-letters the record and moves on; Admin can list and replay dead letters. Per-route circuit breakers, GET retries and per-user rate limiting at the gateway; retry and circuit breaker on service-to-service calls; correlation IDs across HTTP and Kafka | ✅ Built |
 | **Analytics** | Warehouse-style star schema, data-quality checks, AUM and break-trend views | ⬜ Planned |
 | **Dashboard** | React UI for PMs and Operations Analysts | ⬜ Planned |
 
@@ -63,8 +63,8 @@ match the custodian's.**
 | 4 | Positions and valuation (market value, P&L, exposure, limits) | ✅ |
 | 4B | NAV extension: cash ledger, liabilities, fee accrual, NAV | ✅ |
 | 5 | Reconciliation engine | ✅ |
-| 6 | Notifications and resilience | ⬜ Next |
-| 7 | Data engineering and analytics | ⬜ |
+| 6 | Notifications and resilience | ✅ |
+| 7 | Data engineering and analytics | ⬜ Next |
 | 8 | React frontend | ⬜ |
 | 9 | CI/CD, quality gates, observability | ⬜ |
 | 10 | Polish, docs, demo | ⬜ |
@@ -117,7 +117,7 @@ flowchart LR
 | `valuation-service` | 8085 | Prices (source badges), Market Value, P&L, exposure, limits, cash, liabilities, NAV, end-of-day snapshots | ✅ |
 | `position-service` | 8084 | Holdings, weighted-average cost, realized P&L, daily snapshots | ✅ |
 | `reconciliation-service` | 8086 | Custodian file ingest, matching, breaks | Done |
-| `notification-service` | 8087 | In-app and email notifications | Skeleton |
+| `notification-service` | 8087 | In-app and email notifications, open-breaks digest, dead-letter inspection and replay | ✅ |
 | `analytics-service` | 8088 | Analytics ETL and reporting APIs | Skeleton |
 
 **Reliability patterns already in place:** transactional outbox (a trade and its event commit together), at-least-once
@@ -305,6 +305,17 @@ curl -s -H "Authorization: Bearer $OPS" "localhost:8080/api/v1/recon/breaks?stat
 The run reports 3 missing-internal, 3 missing-external, 4 quantity and 4 price breaks. Work them with
 `/api/v1/recon/breaks/{id}/assign`, `/escalate` and `/resolve` (a comment is required), and read `/audit`.
 
+**Notifications:** each break above becomes a notification for Ops, also emailed to Rohan. Open MailHog at
+<http://localhost:8025> to read the emails.
+
+```bash
+curl -s -H "Authorization: Bearer $OPS" "localhost:8080/api/v1/notifications?unreadOnly=true"
+curl -s -X POST -H "Authorization: Bearer $OPS" localhost:8080/api/v1/notifications/read-all
+```
+
+**Dead letters (Admin):** `GET /api/v1/ops/dead-letters/{topic}` lists records that failed after retries, with the
+error. Once the cause is fixed, `POST /api/v1/ops/dead-letters/{topic}/replay` sends them back to their topic.
+
 In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` into **Authorize**.
 
 ---
@@ -317,7 +328,7 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
 | Smoke | 44 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **233 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **249 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 
@@ -348,6 +359,8 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | Rejected trades are stored, not just refused | The blotter and audit trail show every attempted trade, as in real trade capture |
 | Positions rebuilt from all their trades on every event | Cancels are exact even after later trades, and a duplicate event can never double-count |
 | Reconciliation matched in memory in one Spring Batch run, every break action audited | 10k rows in under 30 s; breaks, audit and events commit together |
+| Retry, then dead-letter and move on; resilience shared in `common` | A bad message never blocks a partition, nothing is lost, and every consumer behaves the same way |
+| Emails queued in the database and sent by a poller | A mail-server outage delays emails but never fails event processing or loses a notification |
 | Spring Boot 4 and Java 21 | The currently supported Spring line and Java LTS |
 | HS256 JWTs checked at the gateway and in every service | Simple to run locally, and a service reached directly still rejects forged tokens |
 

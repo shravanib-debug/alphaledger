@@ -44,6 +44,7 @@ class GatewayRoutesTest {
             "/api/v1/trades/1001/cancel,                  trade-service",
             "/api/v1/recon/breaks,                        reconciliation-service",
             "/api/v1/notifications,                       notification-service",
+            "/api/v1/ops/dead-letters,                    notification-service",
             "/api/v1/analytics/break-trend,               analytics-service",
             "/api/v1/ping/portfolio,                      ping-portfolio"
     })
