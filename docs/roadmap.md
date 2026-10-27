@@ -21,7 +21,7 @@
 | 4B | NAV Extension (Cash & Liabilities) | Cash, liabilities, accruals, true NAV = market value + cash − liabilities | ✅ (UI label with Phase 8) |
 | 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ✅ |
 | 6 | Notifications & Resilience | Notifications, DLQ, retries, circuit breakers | ✅ |
-| 7 | Data Engineering & Analytics | Analytics ETL, star schema, DQ checks, views | ⬜ |
+| 7 | Data Engineering & Analytics | Analytics ETL, star schema, DQ checks, views | ✅ |
 | 8 | Frontend (React) | Dashboard, blotter, positions, recon UI | ⬜ |
 | 9 | CI/CD, Quality & Observability | Pipelines, coverage gate, Sonar, monitoring | ⬜ |
 | 10 | Polish, Docs & Demo | README, diagrams, demo data, walkthrough | ⬜ |
@@ -307,29 +307,29 @@
 **Goal:** Build the analytics pipeline and demonstrate data engineering skills.
 
 ### Warehouse model
-- [ ] Create `analytics_db` with staging, core, and mart layers
-- [ ] Build `dim_date`, `dim_portfolio`, `dim_instrument` (with `isin`, `exchange`)
-- [ ] Build `fact_trade`, `fact_position_daily`, `fact_valuation_daily`, `fact_recon_break`
+- [x] Create `analytics_db` with staging, core, and mart layers
+- [x] Build `dim_date`, `dim_portfolio`, `dim_instrument` (with `isin`, `exchange`)
+- [x] Build `fact_trade`, `fact_position_daily`, `fact_valuation_daily`, `fact_recon_break`
 
 ### ETL pipeline
-- [ ] Spring Batch extract jobs from source databases/Kafka into staging
-- [ ] Transform and load into star schema (incremental by date)
-- [ ] Nightly scheduler
-- [ ] Re-runnable and idempotent loads
+- [x] Spring Batch extract jobs from source databases/Kafka into staging
+- [x] Transform and load into star schema (incremental by date)
+- [x] Nightly scheduler
+- [x] Re-runnable and idempotent loads
 
 ### Data quality
-- [ ] Row-count reconciliation (source vs target)
-- [ ] Null, uniqueness, and referential checks
-- [ ] Sanity checks (market value ≥ 0, no future dates; NAV may be negative if liabilities exceed assets)
-- [ ] Store results in `dq_check_result`; fail job on critical errors
+- [x] Row-count reconciliation (source vs target)
+- [x] Null, uniqueness, and referential checks
+- [x] Sanity checks (market value ≥ 0, no future dates; NAV may be negative if liabilities exceed assets)
+- [x] Store results in `dq_check_result`; fail job on critical errors
 
 ### Analytical views and APIs
-- [ ] `vw_aum_by_asset_class`
-- [ ] `vw_daily_pnl`
-- [ ] `vw_break_trend`
-- [ ] `vw_break_ageing`
-- [ ] Analytics REST endpoints
-- [ ] Data lineage documented
+- [x] `vw_aum_by_asset_class`
+- [x] `vw_daily_pnl`
+- [x] `vw_break_trend`
+- [x] `vw_break_ageing`
+- [x] Analytics REST endpoints
+- [x] Data lineage documented ([data-lineage.md](data-lineage.md))
 
 **DoD:** Nightly job populates the warehouse, DQ checks pass, and the four views return correct data for the seeded dataset.
 
@@ -477,3 +477,4 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-17 | 4A | Phase 4A complete. Real files downloaded once (NSE bhavcopy 08-16 Oct 2026, AMFI NAVAll 16-Oct) and filtered to the demo ISINs into `reference-data/sample/nse|amfi` by `make-sample.sh`. `NseBhavcopyParser`/`NseBhavcopyPriceSource` (header check, `ClsPric`, block-deal `BL` rows ignored and `EQ` preferred, bad rows rejected), `AmfiNavPriceSource` as Spring Batch job `amfiNavIngestJob`, `MfApiPriceSource` fallback with Resilience4j circuit breaker and rate limiter (LIVE + network only), one guarded HTTP client, raw-file cache, FAILED log entry when a source has no file, backfill endpoint, OFFLINE startup runs the real parsers over the sample (every demo instrument gets a real 16-Oct price; the thinly traded PFC bond keeps its 14-Oct price, flagged stale). NSE's terms prohibit automated collection, so NSE files are never downloaded on a schedule (ADR 22); `download.sh` only fetches AMFI unless `NSE_MANUAL_FETCH=yes`. Daily price run moved to 23:30 IST (AMFI NAVs arrive by about 23:00), EOD valuation to 23:45. Test JVMs cannot reach external hosts. Tests: 220 total. |
 | 2026-10-26 | 4B | Phase 4B complete (backend). valuation-service V5: append-only `cash_transaction` ledger (trigger refuses UPDATE/DELETE; signed amounts with `effective_date`, so past cash is rebuilt), derived `cash_balance`, `liability` (MANAGEMENT_FEE/EXPENSE/PAYABLE/BORROWING; counts from accrual to payment). `trade.settled` consumed idempotently (by `eventId` and by `tradeRef`): BUY pays out, SELL pays in on the settle date. Cash deposit/withdrawal (withdrawal may not overdraw) and liability create/update/pay/delete endpoints (Admin/Ops); paying moves a liability to cash, a borrowing brings cash in and cannot be deleted. Daily management-fee accrual (1% a year default, `rate × market value / 365`, every calendar day at 23:40 IST, once per portfolio and day). NAV = market value + cash − liabilities in the valuation API (`cashBalance`, `totalLiabilities`, `nav`), snapshots and `valuation.calculated`, basis `FULL_NAV`; exposure and limits stay on market value. Three hand-calculated scenarios in `docs/nav-scenarios.md` asserted by `NavCalculatorTest`; `NavFlowIT` end to end. UI label switch waits for Phase 8. Tests: 233 total. |
 | 2026-10-27 | 6 | Phase 6 complete. common `KafkaResilienceAutoConfiguration` (on in every service with a consumer group): `DefaultErrorHandler` with exponential backoff (3 retries), then `<topic>.DLT` (same key, exception headers) so a poison record never blocks a partition; unreadable records (bad JSON, missing payload: `InvalidEventException`) skip retries; DLT topics created on startup; record interceptor puts the Kafka `X-Correlation-Id` header into the MDC; `DeadLetterReplayer` (list/replay, progress kept as a consumer group). notification-service: notifications per audience role (breaks -> Ops, limit breaches -> PMs; Admin/Auditor see all), per-user read state, unread count, mark read/all, idempotent consumers, email via MailHog queued in the database and sent by a poller with retries, daily open-breaks digest from `recon.break.created`/`resolved`, Admin dead-letter API `/api/v1/ops/dead-letters`. Gateway: per-route Resilience4j circuit breaker with JSON 503 fallback, GET retries, per-user token-bucket rate limit (429). trade-service -> portfolio-service: retry inside a circuit breaker, 4xx not retried. Failure-injection ITs: poison messages dead-lettered while the next event is processed, replay, consumer stopped and restarted without loss. notification-service added to docker-compose; smoke test now checks NAV, notifications, dead letters and MailHog. Tests: 249 total. |
+| 2026-10-27 | 7 | Phase 7 complete. analytics-service: `analytics_db` with `staging`, `core` and `mart` schemas; `dim_date` (2020-2035), `dim_portfolio`, `dim_instrument` (SCD1, Unknown member -1), `fact_trade`, `fact_position_daily` (snapshot x latest price on or before the day), `fact_valuation_daily` (with cash, liabilities, NAV), `fact_recon_break` (age recomputed each run). Spring Batch `analyticsEtlJob` (extract -> load -> data quality), nightly 02:00 IST for the previous day or on request (Admin), incremental by date or full refresh; read-only JDBC extract from the five service databases (ADR 23); idempotent (truncate staging, upsert dims, delete-and-reload daily facts, upsert trades and breaks); 20+ checks in `dq_check_result` (row counts, not null, uniqueness, referential, sanity, freshness), critical failure fails the run and keeps the results. Views `vw_aum_by_asset_class`, `vw_daily_pnl`, `vw_break_trend`, `vw_break_ageing` and `/api/v1/analytics/*` endpoints. `AnalyticsEtlIT` runs each source service's real Flyway migrations and checks hand-calculated numbers, incremental load, idempotent re-run and a failing DQ run. Lineage in `docs/data-lineage.md`. analytics-service in docker-compose; smoke test runs a full refresh. Tests: 250 total. |

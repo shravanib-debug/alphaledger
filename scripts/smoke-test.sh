@@ -231,6 +231,18 @@ ADMIN_TOKEN=$(login anita.admin@alphaledger.test)
 expect_status "admin can read dead letters (200)" 200 -H "Authorization: Bearer $ADMIN_TOKEN"     "$GATEWAY/api/v1/ops/dead-letters/limit.breached"
 check "MailHog received the break email"      "http://localhost:8025/api/v2/messages" "SMOKE-CUST-$$"
 
+# ---------- Phase 7: analytics ----------
+check "analytics-service registered"          "$EUREKA/eureka/apps/ANALYTICS-SERVICE" '"ANALYTICS-SERVICE"'
+expect_status "PM cannot start an ETL run (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN"     "$GATEWAY/api/v1/analytics/etl-runs"
+etl=$(curl -sS -X POST -H "Authorization: Bearer $ADMIN_TOKEN"     "$GATEWAY/api/v1/analytics/etl-runs?date=$(TZ=Asia/Kolkata date +%F)&fullRefresh=true" || true)
+if [[ "$etl" == *'"status":"COMPLETED"'* ]]; then
+    echo "PASS  analytics ETL full refresh completed with data-quality checks passing"
+else
+    echo "FAIL  analytics ETL full refresh: $etl"; failures=$((failures + 1))
+fi
+await_json "break trend includes the smoke break (recon_db -> warehouse)"     "$GATEWAY/api/v1/analytics/break-trend?from=2026-10-01" '"break_type":"MISSING_INTERNAL"'
+expect_status "AUM by asset class (200)"       200 -H "Authorization: Bearer $AUDITOR_TOKEN"     "$GATEWAY/api/v1/analytics/aum-by-asset-class"
+
 if (( failures > 0 )); then
     echo "$failures check(s) failed"
     exit 1

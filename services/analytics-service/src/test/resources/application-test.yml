@@ -1,0 +1,16 @@
+# Test profile: no config server or Eureka; Postgres comes from Testcontainers (@ServiceConnection), with the source
+# databases created in the same container (see AnalyticsEtlIT).
+spring:
+  cloud:
+    config:
+      enabled: false
+eureka:
+  client:
+    enabled: false
+
+alphaledger:
+  security:
+    jwt:
+      secret: dGVzdC1vbmx5LXNlY3JldC10ZXN0LW9ubHktc2VjcmV0LTEyMzQ1Ng==
+  analytics:
+    etl-cron: "-"   # tests start runs on request

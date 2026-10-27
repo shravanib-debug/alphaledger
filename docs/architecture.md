@@ -428,6 +428,7 @@ erDiagram
   - Referential integrity (every fact row has a valid dimension row).
   - Sanity: market value ≥ 0 (NAV can legitimately be negative if liabilities exceed assets), quantity ≥ 0, no future dates.
   - Results stored in a `dq_check_result` table and surfaced in the dashboard.
+- **As built (Phase 7):** Spring Batch job `analyticsEtlJob` (extract → load → data quality), nightly at 02:00 IST for the previous day, or on request. Extract reads each service's database through a read-only connection (ADR 23) into `staging.stg_*`; load is set-based SQL into `core.*` (dimensions upserted, daily facts deleted and reloaded for the days in scope, trades and breaks upserted), so every run is idempotent. Facts with no matching dimension row point at the Unknown member (-1). Marts are views in the `mart` schema. Column-level lineage and the full list of checks: [data-lineage.md](data-lineage.md).
 - **Stretch:** replace this ETL with a Spark job, or load to a real Snowflake trial account.
 
 ### 5.7 Data lineage summary
@@ -852,6 +853,7 @@ alphaledger/
 | 20 | Reconciliation matches in memory with a hash map inside one Spring Batch run; quantities compared signed | 10k rows in well under 30 s with simple, testable code; one transaction makes breaks, audit and events all-or-nothing | A run is bounded by memory (fine for one custodian file per day); very large files would need a SQL join instead |
 | 21 | Resilience4j core modules (circuit breaker, rate limiter) used directly, not through a Spring Boot starter | Only the mfapi.in fallback needs them; the core modules have no Spring Boot version coupling | Configured in code rather than YAML; Phase 6 can add the starter if more call sites need it |
 | 22 | No scheduled download from NSE; bhavcopies are saved by hand (LIVE) or read from a committed filtered sample (OFFLINE) | NSE's terms prohibit systematic or automated data collection; AMFI's single daily file and mfapi.in have no such published restriction | LIVE prices for listed instruments need a person (or an NSE Data licence with `nse-download: true`); the demo and CI run on the committed sample |
+| 23 | Analytics ETL extracts from the services' databases through read-only JDBC connections, not from Kafka | A nightly batch can re-run any past date and backfill; Kafka topics keep only 7-14 days and carry no history of dimensions; one Postgres server locally | The ETL depends on source table shapes (tested by running each service's real migrations in `AnalyticsEtlIT`); production would use read replicas or CDC |
 
 ---
 

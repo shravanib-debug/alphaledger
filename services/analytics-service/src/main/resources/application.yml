@@ -15,6 +15,37 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate   # Flyway owns the schema
+  batch:
+    job:
+      enabled: false             # runs nightly or on request, not at startup
+    jdbc:
+      initialize-schema: never   # Flyway creates the batch tables (V3)
+
+alphaledger:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}   # Base64 HMAC key, >= 32 bytes; never committed (see infra/.env.example)
+  analytics:
+    zone: Asia/Kolkata
+    etl-cron: "0 0 2 * * *"   # nightly, loads the previous day after the 23:45 end-of-day valuation
+    # Read-only extract connections to the services' databases (ADR 23); same Postgres server locally.
+    sources:
+      portfolio: &source
+        url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/portfolio_db
+        username: ${DB_USER:alphaledger}
+        password: ${DB_PASSWORD:alphaledger}
+      trade:
+        <<: *source
+        url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/trade_db
+      position:
+        <<: *source
+        url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/position_db
+      valuation:
+        <<: *source
+        url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/valuation_db
+      recon:
+        <<: *source
+        url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/recon_db
 
 eureka:
   client:

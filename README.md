@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-249%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-250%20passing-success)
 
 ---
 
@@ -44,7 +44,7 @@ match the custodian's.**
 | **NAV** | NAV = market value + cash − liabilities, with each part shown. Cash comes from an append-only ledger (deposits, withdrawals, settled trades). Liabilities cover fees, expenses, payables and borrowings, plus a daily management-fee accrual | ✅ Built |
 | **Reconciliation** (signature feature) | Match a custodian file to settled trades on `trade ref + ISIN + trade date`; detect missing, quantity and price breaks; assign, resolve and escalate with an audit trail | ✅ Done |
 | **Notifications & resilience** | In-app and email alerts (MailHog) for reconciliation breaks (Ops) and limit breaches (PMs), with per-user read state and a daily open-breaks digest. Every Kafka consumer retries with backoff, then dead-letters the record and moves on; Admin can list and replay dead letters. Per-route circuit breakers, GET retries and per-user rate limiting at the gateway; retry and circuit breaker on service-to-service calls; correlation IDs across HTTP and Kafka | ✅ Built |
-| **Analytics** | Warehouse-style star schema, data-quality checks, AUM and break-trend views | ⬜ Planned |
+| **Analytics** | Nightly Spring Batch ETL from the service databases into a staging → star schema → mart warehouse (`analytics_db`), with 20+ data-quality checks (row counts, nulls, uniqueness, referential, sanity) that fail the run on critical errors; AUM by asset class, daily P&L, break trend and break ageing views and APIs | ✅ Built |
 | **Dashboard** | React UI for PMs and Operations Analysts | ⬜ Planned |
 
 **Personas** (demo users): Priya (Portfolio Manager), Rohan (Operations Analyst), Anita (Admin), Vikram (Auditor).
@@ -64,8 +64,8 @@ match the custodian's.**
 | 4B | NAV extension: cash ledger, liabilities, fee accrual, NAV | ✅ |
 | 5 | Reconciliation engine | ✅ |
 | 6 | Notifications and resilience | ✅ |
-| 7 | Data engineering and analytics | ⬜ Next |
-| 8 | React frontend | ⬜ |
+| 7 | Data engineering and analytics | ✅ |
+| 8 | React frontend | ⬜ Next |
 | 9 | CI/CD, quality gates, observability | ⬜ |
 | 10 | Polish, docs, demo | ⬜ |
 
@@ -118,7 +118,7 @@ flowchart LR
 | `position-service` | 8084 | Holdings, weighted-average cost, realized P&L, daily snapshots | ✅ |
 | `reconciliation-service` | 8086 | Custodian file ingest, matching, breaks | Done |
 | `notification-service` | 8087 | In-app and email notifications, open-breaks digest, dead-letter inspection and replay | ✅ |
-| `analytics-service` | 8088 | Analytics ETL and reporting APIs | Skeleton |
+| `analytics-service` | 8088 | Nightly ETL into the warehouse, data-quality checks, mart APIs | ✅ |
 
 **Reliability patterns already in place:** transactional outbox (a trade and its event commit together), at-least-once
 delivery with correlation IDs on every request and event, idempotent trade creation, database row locking
@@ -313,6 +313,19 @@ curl -s -H "Authorization: Bearer $OPS" "localhost:8080/api/v1/notifications?unr
 curl -s -X POST -H "Authorization: Bearer $OPS" localhost:8080/api/v1/notifications/read-all
 ```
 
+**Analytics:** the warehouse loads nightly at 02:00 IST. To load now (as Anita), then read the marts:
+
+```bash
+ADMIN=$(curl -s -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"anita.admin@alphaledger.test","password":"Demo@AlphaLedger2026"}' | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+curl -s -X POST -H "Authorization: Bearer $ADMIN" "localhost:8080/api/v1/analytics/etl-runs?fullRefresh=true"
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/analytics/aum-by-asset-class
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/api/v1/analytics/dq-results
+```
+
+Also `/daily-pnl`, `/break-trend`, `/break-ageing` and `/etl-runs`. Column-level lineage is in
+[docs/data-lineage.md](docs/data-lineage.md).
+
 **Dead letters (Admin):** `GET /api/v1/ops/dead-letters/{topic}` lists records that failed after retries, with the
 error. Once the cause is fixed, `POST /api/v1/ops/dead-letters/{topic}/replay` sends them back to their topic.
 
@@ -328,7 +341,7 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
 | Smoke | 44 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **249 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **250 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 
@@ -360,6 +373,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | Positions rebuilt from all their trades on every event | Cancels are exact even after later trades, and a duplicate event can never double-count |
 | Reconciliation matched in memory in one Spring Batch run, every break action audited | 10k rows in under 30 s; breaks, audit and events commit together |
 | Retry, then dead-letter and move on; resilience shared in `common` | A bad message never blocks a partition, nothing is lost, and every consumer behaves the same way |
+| Analytics ETL reads the service databases (read-only), not Kafka | Any past date can be re-run or backfilled; idempotent loads; tested against each service's real migrations |
 | Emails queued in the database and sent by a poller | A mail-server outage delays emails but never fails event processing or loses a notification |
 | Spring Boot 4 and Java 21 | The currently supported Spring line and Java LTS |
 | HS256 JWTs checked at the gateway and in every service | Simple to run locally, and a service reached directly still rejects forged tokens |
@@ -373,6 +387,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | [Product requirements](docs/prd.md) | Goals, personas, functional requirements, business rules, demo data plan |
 | [Architecture](docs/architecture.md) | Services, events, data pipelines, data model, APIs, security, ADRs |
 | [Roadmap](docs/roadmap.md) | Phase checklists, definitions of done, progress log |
+| [Data lineage](docs/data-lineage.md) | Warehouse layers, where every column comes from, data-quality checks |
 | [NAV scenarios](docs/nav-scenarios.md) | Three NAV calculations worked out by hand |
 | [Event schemas](docs/events.md) | Kafka envelope; trade, position, price, valuation and limit events |
 | [Conventions](docs/conventions.md) | Branching, commits, naming for packages, topics, endpoints, tables |
