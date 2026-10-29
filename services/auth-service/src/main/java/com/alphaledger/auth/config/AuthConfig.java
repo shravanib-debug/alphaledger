@@ -3,6 +3,7 @@ package com.alphaledger.auth.config;
 import java.time.Clock;
 
 import org.springframework.context.annotation.Bean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -14,6 +15,7 @@ import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.alphaledger.common.security.JwtProperties;
 
 @Configuration
+@EnableConfigurationProperties(SessionProperties.class)
 public class AuthConfig {
 
     @Bean

@@ -509,7 +509,7 @@ erDiagram
 role(code PK, description)                                             -- ADMIN, PM, OPS_ANALYST, AUDITOR
 app_user(id, email UNIQUE, password_hash, full_name, role FK, status, created_at)   -- "user" is reserved in PostgreSQL;
                                                                        -- IDs < 1000 reserved for seeded demo users 1-4
-refresh_token(id, user_id FK, token_hash UNIQUE, expires_at, revoked, created_at)   -- SHA-256 of an opaque token
+refresh_token(id, user_id FK, token_hash UNIQUE, expires_at, revoked, revoked_reason, revoked_at, replaced_by FK, rotation_key_hash, created_at)   -- SHA-256 of an opaque token; rotation chain (docs/auth-session.md)
 ```
 
 ### 6.2 `portfolio_db`
@@ -627,7 +627,7 @@ dq_check_result(id, check_name, run_at, status, details)
 
 | Service | Endpoint | Purpose |
 |---|---|---|
-| Auth | `POST /api/v1/auth/login` | Login, returns JWT + refresh token |
+| Auth | `POST /api/v1/auth/login` | Login, returns JWT + refresh token (body for API clients; HttpOnly cookie for browsers sending `X-Client: web`) |
 | Auth | `POST /api/v1/auth/refresh` | Rotate refresh token, new access token |
 | Auth | `POST /api/v1/auth/logout` | Revoke a refresh token |
 | Auth | `GET /api/v1/auth/me` | Current user |
@@ -687,7 +687,7 @@ dq_check_result(id, check_name, run_at, status, details)
 
 | Layer | Control |
 |---|---|
-| Authentication | Email + password → HS256 JWT access token (15 min) + opaque refresh token (7 days, stored as SHA-256, rotated on every use; reuse of a used token revokes all of the user's tokens) |
+| Authentication | Email + password → HS256 JWT access token (15 min) + opaque refresh token (7 days, stored as SHA-256, rotated on every use under a row lock; reuse of a used token revokes all of the user's tokens). Browsers get the refresh token only in a `Secure; HttpOnly; SameSite=Strict` cookie scoped to `/api/v1/auth`, with Origin and `Sec-Fetch-Site` checks; a lost-response retry is recognised only by its `Idempotency-Key` within 30 s ([auth-session.md](auth-session.md)) |
 | Gateway | Validates JWT signature, expiry and issuer; rejects unauthenticated calls except login/refresh/logout, health and the smoke-test ping |
 | Authorization | Each service validates the JWT again (shared HS256 key) and enforces roles with `@PreAuthorize`; ownership rules (a PM changes only own portfolios) in the service layer |
 | Propagation | Gateway strips client-sent `X-User-*` headers and forwards `X-User-Id`, `X-User-Email`, `X-User-Roles` from the verified token (for logging); services authorize from the token, never from these headers |
@@ -854,6 +854,7 @@ alphaledger/
 | 21 | Resilience4j core modules (circuit breaker, rate limiter) used directly, not through a Spring Boot starter | Only the mfapi.in fallback needs them; the core modules have no Spring Boot version coupling | Configured in code rather than YAML; Phase 6 can add the starter if more call sites need it |
 | 22 | No scheduled download from NSE; bhavcopies are saved by hand (LIVE) or read from a committed filtered sample (OFFLINE) | NSE's terms prohibit systematic or automated data collection; AMFI's single daily file and mfapi.in have no such published restriction | LIVE prices for listed instruments need a person (or an NSE Data licence with `nse-download: true`); the demo and CI run on the committed sample |
 | 23 | Analytics ETL extracts from the services' databases through read-only JDBC connections, not from Kafka | A nightly batch can re-run any past date and backfill; Kafka topics keep only 7-14 days and carry no history of dimensions; one Postgres server locally | The ETL depends on source table shapes (tested by running each service's real migrations in `AnalyticsEtlIT`); production would use read replicas or CDC |
+| 24 | Browser refresh token in an HttpOnly, SameSite=Strict cookie; API clients keep the body flow | Script on the page can never read the long-lived credential; Postman, curl and service tests unchanged | Needs same-origin serving, Origin checks and cross-tab coordination (Web Locks); a narrow, key-bound replay instead of a grace period handles lost responses ([auth-session.md](auth-session.md)) |
 
 ---
 

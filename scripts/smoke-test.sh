@@ -205,6 +205,20 @@ expect_status "exposure by asset class (200)"   200 -H "Authorization: Bearer $A
 expect_status "PM cannot set limit rules (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN" \
     -H 'Content-Type: application/json' -d '{"assetClass":"CREDIT","maxPct":50}' "$GATEWAY/api/v1/valuations/limit-rules"
 
+# ---------- M0: browser (cookie) sessions through the gateway ----------
+jar="smoke-cookies-$$.txt"
+web_login=$(curl -sS -c "$jar" -X POST "$GATEWAY/api/v1/auth/login" -H 'Content-Type: application/json'     -H 'X-Client: web' -H 'Origin: http://localhost:3000'     -d '{"email":"priya.pm@alphaledger.test","password":"'"$DEMO_PASSWORD"'"}' || true)
+if grep -q 'al_refresh' "$jar" 2>/dev/null && grep -q '#HttpOnly_' "$jar" && [[ "$web_login" != *refreshToken* ]]; then
+    echo "PASS  web login sets an HttpOnly refresh cookie and keeps the token out of the body"
+else
+    echo "FAIL  web login cookie: $web_login"; failures=$((failures + 1))
+fi
+web_refresh=$(curl -sS -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/api/v1/auth/refresh"     -H 'Content-Type: application/json' -H 'X-Client: web' -H 'Origin: http://localhost:3000' -d '{}' || true)
+[[ "$web_refresh" == 200 ]] && echo "PASS  cookie refresh through the gateway (200)"     || { echo "FAIL  cookie refresh through the gateway ($web_refresh)"; failures=$((failures + 1)); }
+cross=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/api/v1/auth/refresh"     -H 'Content-Type: application/json' -H 'X-Client: web' -H 'Origin: https://evil.example' -d '{}' || true)
+[[ "$cross" == 403 ]] && echo "PASS  cross-origin cookie refresh rejected (403)"     || { echo "FAIL  cross-origin cookie refresh rejected ($cross)"; failures=$((failures + 1)); }
+rm -f "$jar"
+
 # ---------- Phase 5: reconciliation ----------
 check "reconciliation-service registered"     "$EUREKA/eureka/apps/RECONCILIATION-SERVICE" '"RECONCILIATION-SERVICE"'
 OPS_TOKEN=$(login rohan.ops@alphaledger.test)

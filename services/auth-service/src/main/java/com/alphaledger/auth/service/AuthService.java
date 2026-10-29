@@ -12,8 +12,9 @@ import com.alphaledger.auth.dto.UserResponse;
 import com.alphaledger.auth.exception.InvalidCredentialsException;
 import com.alphaledger.auth.exception.InvalidRefreshTokenException;
 import com.alphaledger.auth.repository.UserAccountRepository;
+import com.alphaledger.auth.service.RefreshTokenService.Rotation;
 
-/** Login, token refresh and logout. */
+/** Login, token refresh and logout. How the refresh token travels (body or cookie) is the controller's concern. */
 @Service
 public class AuthService {
 
@@ -33,8 +34,12 @@ public class AuthService {
         this.dummyHash = passwordEncoder.encode("not-a-real-password");
     }
 
+    /** The response body plus the issued refresh token, which the controller puts in the body or a cookie. */
+    public record Session(TokenResponse tokens, Rotation refresh) {
+    }
+
     @Transactional
-    public TokenResponse login(String email, String password) {
+    public Session login(String email, String password) {
         UserAccount user = users.findByEmail(normalize(email)).orElse(null);
         if (user == null) {
             passwordEncoder.matches(password, dummyHash);
@@ -43,16 +48,19 @@ public class AuthService {
         if (!passwordEncoder.matches(password, user.getPasswordHash()) || !user.isActive()) {
             throw new InvalidCredentialsException();
         }
-        return issueTokens(user);
+        return session(user, refreshTokens.issue(user.getId()));
     }
 
     @Transactional(noRollbackFor = InvalidRefreshTokenException.class)
-    public TokenResponse refresh(String refreshToken) {
-        Long userId = refreshTokens.consume(refreshToken);
-        UserAccount user = users.findById(userId)
-                .filter(UserAccount::isActive)
-                .orElseThrow(InvalidRefreshTokenException::new);
-        return issueTokens(user);
+    public Session refresh(String refreshToken, String idempotencyKey) {
+        Rotation rotation = refreshTokens.rotate(refreshToken, idempotencyKey);
+        UserAccount user = users.findById(rotation.userId()).orElse(null);
+        if (user == null || !user.isActive()) {
+            // A disabled user keeps no valid refresh token, including the one just issued.
+            refreshTokens.revokeAllForUser(rotation.userId());
+            throw new InvalidRefreshTokenException();
+        }
+        return session(user, rotation);
     }
 
     @Transactional
@@ -60,9 +68,9 @@ public class AuthService {
         refreshTokens.revoke(refreshToken);
     }
 
-    private TokenResponse issueTokens(UserAccount user) {
-        return TokenResponse.bearer(accessTokens.issue(user), accessTokens.ttlSeconds(),
-                refreshTokens.issue(user.getId()), UserResponse.from(user));
+    private Session session(UserAccount user, Rotation refresh) {
+        return new Session(TokenResponse.bearer(accessTokens.issue(user), accessTokens.ttlSeconds(),
+                refresh.refreshToken(), UserResponse.from(user)), refresh);
     }
 
     static String normalize(String email) {

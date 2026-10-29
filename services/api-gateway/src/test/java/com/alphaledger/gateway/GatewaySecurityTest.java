@@ -62,6 +62,24 @@ class GatewaySecurityTest {
     }
 
     @Test
+    void cookieModeAuthPreflightFromTheDevServerIsAllowedWithCredentialsAndOtherOriginsAreNot() {
+        client.options().uri("/api/v1/auth/refresh")
+                .header("Origin", "http://localhost:5173")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "x-client,idempotency-key,content-type")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:5173")
+                .expectHeader().valueEquals("Access-Control-Allow-Credentials", "true");
+        client.options().uri("/api/v1/auth/refresh")
+                .header("Origin", "https://evil.example")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "x-client")
+                .exchange()
+                .expectStatus().isForbidden();
+    }
+
+    @Test
     void corsPreflightFromTheFrontendIsAllowedWithoutAToken() {
         client.options().uri("/api/v1/portfolios")
                 .header("Origin", "http://localhost:3000")

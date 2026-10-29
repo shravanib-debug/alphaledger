@@ -124,7 +124,7 @@ services:
     environment:
       <<: *java-env
       SERVER_PORT: 8080
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
       - "8080:8080"
     depends_on:
@@ -149,6 +149,10 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-alphaledger}
       SEED_DEMO_USERS: "true"
       DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-Demo@AlphaLedger2026}
+      # Browser sessions (docs/auth-session.md). The local stack is plain HTTP, so the refresh cookie cannot be
+      # Secure here; any deployed environment is HTTPS and keeps the default (true).
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_ALLOWED_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
       - "8081:8080"
     depends_on:

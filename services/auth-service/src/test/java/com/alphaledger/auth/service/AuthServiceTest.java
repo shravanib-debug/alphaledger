@@ -19,6 +19,7 @@ import com.alphaledger.auth.domain.UserAccount;
 import com.alphaledger.auth.domain.UserStatus;
 import com.alphaledger.auth.dto.TokenResponse;
 import com.alphaledger.auth.exception.InvalidCredentialsException;
+import com.alphaledger.auth.exception.InvalidRefreshTokenException;
 import com.alphaledger.auth.repository.UserAccountRepository;
 
 class AuthServiceTest {
@@ -36,9 +37,9 @@ class AuthServiceTest {
         when(users.findByEmail("priya.pm@alphaledger.test")).thenReturn(Optional.of(priya));
         when(accessTokens.issue(priya)).thenReturn("access");
         when(accessTokens.ttlSeconds()).thenReturn(900L);
-        when(refreshTokens.issue(2L)).thenReturn("refresh");
+        when(refreshTokens.issue(2L)).thenReturn(rotation("refresh"));
 
-        TokenResponse response = service.login("  Priya.PM@AlphaLedger.test ", "correct horse battery");
+        TokenResponse response = service.login("  Priya.PM@AlphaLedger.test ", "correct horse battery").tokens();
 
         assertThat(response.accessToken()).isEqualTo("access");
         assertThat(response.refreshToken()).isEqualTo("refresh");
@@ -71,14 +72,29 @@ class AuthServiceTest {
     @Test
     void refreshIssuesNewTokensForActiveUser() {
         UserAccount priya = AccessTokenServiceTest.user(2L, Role.PM);
-        when(refreshTokens.consume("old")).thenReturn(2L);
+        when(refreshTokens.rotate("old", "key")).thenReturn(rotation("new-refresh"));
         when(users.findById(2L)).thenReturn(Optional.of(priya));
         when(accessTokens.issue(priya)).thenReturn("new-access");
-        when(refreshTokens.issue(2L)).thenReturn("new-refresh");
 
-        TokenResponse response = service.refresh("old");
+        TokenResponse response = service.refresh("old", "key").tokens();
 
         assertThat(response.accessToken()).isEqualTo("new-access");
         assertThat(response.refreshToken()).isEqualTo("new-refresh");
+    }
+
+    @Test
+    void refreshForADisabledUserRevokesEveryTokenIncludingTheNewOne() {
+        UserAccount disabled = AccessTokenServiceTest.user(2L, Role.PM);
+        ReflectionTestUtils.setField(disabled, "status", UserStatus.DISABLED);
+        when(refreshTokens.rotate("old", null)).thenReturn(rotation("new-refresh"));
+        when(users.findById(2L)).thenReturn(Optional.of(disabled));
+
+        assertThatThrownBy(() -> service.refresh("old", null)).isInstanceOf(InvalidRefreshTokenException.class);
+        verify(refreshTokens).revokeAllForUser(2L);
+        verify(accessTokens, never()).issue(org.mockito.ArgumentMatchers.any());
+    }
+
+    private static RefreshTokenService.Rotation rotation(String raw) {
+        return new RefreshTokenService.Rotation(10L, 2L, raw, java.time.Instant.parse("2026-10-22T09:00:00Z"));
     }
 }

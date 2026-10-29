@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-250%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-275%20passing-success)
 
 ---
 
@@ -35,7 +35,7 @@ match the custodian's.**
 
 | Area | What the platform does | Status |
 |---|---|---|
-| **Security** | Email/password login, short-lived JWT access tokens with rotating refresh tokens, four roles (Admin, Portfolio Manager, Operations Analyst, Auditor), checks at the gateway and again in every service | ✅ Built |
+| **Security** | Email/password login, short-lived JWT access tokens with rotating refresh tokens (row-locked rotation, reuse detection), four roles (Admin, Portfolio Manager, Operations Analyst, Auditor), checks at the gateway and again in every service. Browsers keep the refresh token only in a `Secure; HttpOnly; SameSite=Strict` cookie with Origin checks; API clients use the body | ✅ Built |
 | **Portfolios & instruments** | Portfolios split into funds by asset class (Private Equity, Credit, Real Estate); instruments keyed by **ISIN** with check-digit validation; a PM changes only the portfolios they manage | ✅ Built |
 | **Trade capture** | BUY/SELL trades in INR with **T+1 settlement on NSE business days**, a status lifecycle (NEW → VALIDATED → SETTLED, REJECTED, CANCELLED), a full audit trail, idempotent trade references, CSV bulk upload, automatic settlement | ✅ Built |
 | **Events** | Every change is published to **Kafka** through a transactional outbox: `trade.*`, `position.updated`, `price.updated`, `valuation.calculated`, `limit.breached`; consumers are idempotent | ✅ Built |
@@ -341,7 +341,7 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
 | Smoke | 44 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **250 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **275 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 
@@ -377,6 +377,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | Emails queued in the database and sent by a poller | A mail-server outage delays emails but never fails event processing or loses a notification |
 | Spring Boot 4 and Java 21 | The currently supported Spring line and Java LTS |
 | HS256 JWTs checked at the gateway and in every service | Simple to run locally, and a service reached directly still rejects forged tokens |
+| Browser refresh token only in an HttpOnly cookie; lost-response retries bound to an `Idempotency-Key`, not a grace period | Script on the page can never read the long-lived credential, and a stolen token is always detected as reuse |
 
 ---
 
@@ -387,6 +388,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | [Product requirements](docs/prd.md) | Goals, personas, functional requirements, business rules, demo data plan |
 | [Architecture](docs/architecture.md) | Services, events, data pipelines, data model, APIs, security, ADRs |
 | [Roadmap](docs/roadmap.md) | Phase checklists, definitions of done, progress log |
+| [Browser sessions](docs/auth-session.md) | Refresh-token cookie, CSRF checks, rotation, reuse and replay rules, frontend contract |
 | [UI plan](docs/ui-plan.md) | Phase 8 design system, screens against the API, milestones |
 | [Data lineage](docs/data-lineage.md) | Warehouse layers, where every column comes from, data-quality checks |
 | [NAV scenarios](docs/nav-scenarios.md) | Three NAV calculations worked out by hand |

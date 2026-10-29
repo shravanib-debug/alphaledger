@@ -235,19 +235,19 @@ frontend/
 
 ### 5.2 Authentication and the refresh flow
 
-The auth API returns `{ accessToken, expiresIn, refreshToken, user }` from `POST /auth/login`, rotates both tokens on
-`POST /auth/refresh` (the old refresh token is revoked, and reuse revokes all), and revokes on `POST /auth/logout`.
+Implemented in M0; full contract in [auth-session.md](auth-session.md) §6.
 
-- **Access token:** in memory only (React context), never in storage.
-- **Refresh token:** in `sessionStorage`, so a page reload in the same tab stays signed in and closing the tab signs
-  out. *Trade-off:* readable by script on the page; mitigated by a strict Content-Security-Policy from nginx and no
-  third-party scripts. Moving it to an `HttpOnly` cookie needs an auth-service change and is listed as a follow-up
-  (§10).
-- **Interceptor:** on a 401, one refresh call runs; concurrent requests wait for it and are retried once with the new
-  token. If refresh fails (expired, reused, revoked), the session is cleared and the user returns to `/login` with
-  "Your session ended; please sign in again", keeping the page they were on as `?next=`.
+- **Access token:** in memory only (React context), sent as `Authorization: Bearer`.
+- **Refresh token:** never visible to the app. Login, refresh and logout send `X-Client: web`; the server keeps the
+  refresh token in a `Secure; HttpOnly; SameSite=Strict` cookie scoped to `/api/v1/auth`.
+- **Interceptor:** on a 401 from a business API, one refresh runs (single flight within the tab); concurrent requests
+  wait for it and are retried once with the new access token. If refresh fails, the session is cleared and the user
+  returns to `/login` with "Your session ended; please sign in again", keeping the page as `?next=`.
+- **Across tabs:** every refresh runs inside `navigator.locks.request('alphaledger-refresh', …)`, so two tabs never
+  present the same cookie at once. Each attempt carries a fresh `Idempotency-Key`; a network-error retry of the same
+  attempt reuses it.
 - **Proactive refresh:** 60 s before `expiresIn` runs out, so active users never see a 401.
-- **Bootstrap:** on load, if a refresh token exists, refresh first, then `GET /auth/me`.
+- **Bootstrap:** on load, refresh first (restores the session from the cookie), then `GET /auth/me`.
 
 ### 5.3 Data fetching
 
@@ -426,12 +426,12 @@ Done before or alongside the screens that need them (small, separate commits):
 
 | # | Change | Needed by | Why |
 |---|---|---|---|
+| B0 | Refresh token in an HttpOnly cookie for browsers, row-locked rotation, key-bound replay — **done** ([auth-session.md](auth-session.md)) | Login, session restore | Script on the page must never read the refresh token |
 | B1 | Return dates as `yyyy-MM-dd` everywhere a service returns rows as maps (valuation history, cash, liabilities, recon runs and breaks, ledger, limit breaches) | All tables | Today they serialise as `2026-10-15T00:00:00.000Z`; analytics already fixed (Phase 7) |
 | B2 | `GET /api/v1/auth/users/directory` for any signed-in user: `id`, `fullName`, `role` (no emails, no status) | Break assignment, audit timelines, assignee column | `/auth/users` is Admin-only, so Ops cannot pick an assignee or see names |
 | B3 | Check every list endpoint used by the UI returns what the screen needs without N+1 calls; instrument names come from one cached `GET /instruments` (29 instruments) | Blotter, positions | Avoids a call per row |
 
 Follow-ups, not in Phase 8:
-- Refresh token in an `HttpOnly`, `SameSite=Strict` cookie (auth-service change).
 - Server-side search endpoint if the instrument or trade lists outgrow client-side search.
 - Live updates over Server-Sent Events instead of polling.
 
@@ -443,7 +443,7 @@ Each milestone ends with its tests green, the roadmap ticked and a commit on `de
 
 | # | Milestone | Contents | Roadmap items |
 |---|---|---|---|
-| M0 | Backend prerequisites | B1, B2 with tests | — |
+| M0 | Backend prerequisites | B0 (done), B1, B2 with tests | — |
 | M1 | Foundation and style guide | Vite + TS scaffold, Tailwind tokens, fonts, `lib/format`, every §3.5 component, `/style-guide` page — **review point** | Scaffold; UI library and theme |
 | M2 | Shell and auth | Login, AuthProvider, Axios interceptors and refresh, access matrix, route guards, sidebar, top bar, global search, notification bell | Axios client with JWT; routing and role menus; login |
 | M3 | Overview, positions, valuation | §6.2, §6.5, §6.6 (cash and liabilities included) | Portfolio dashboard; positions with source badge |
@@ -463,7 +463,7 @@ Vikram confirm every action is read-only.
 | Decision | Choice | Alternatives considered |
 |---|---|---|
 | Component approach | Tailwind + Radix, own components | Mantine, MUI: their defaults (rounded, filled, shadowed) conflict with the visual direction |
-| Token storage | Access in memory, refresh in `sessionStorage` | `localStorage` (survives tab close, larger exposure); cookie (needs backend change; follow-up) |
+| Token storage | Access in memory; refresh in an HttpOnly cookie set by auth-service | `sessionStorage` / `localStorage`: readable by any script on the page |
 | Overview totals | Summed in the browser from per-portfolio valuations | New aggregate endpoint: unnecessary for 3 portfolios; revisit with many |
 | Live data | Polling while visible | WebSocket/SSE: more moving parts for little gain at this scale |
 | Fonts | Self-hosted Newsreader and Inter | Google Fonts CDN: breaks the offline stack and the CSP |
