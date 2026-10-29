@@ -337,7 +337,7 @@
 
 ## Phase 8: Frontend (React)
 
-**Goal:** A clean, role-aware dashboard for PMs and Ops Analysts.
+**Goal:** A clean, role-aware dashboard for PMs and Ops Analysts. Design system, screen specifications and milestones: [ui-plan.md](ui-plan.md).
 
 ### Setup
 - [ ] Scaffold React + Vite (+ TypeScript) app

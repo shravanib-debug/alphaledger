@@ -387,6 +387,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | [Product requirements](docs/prd.md) | Goals, personas, functional requirements, business rules, demo data plan |
 | [Architecture](docs/architecture.md) | Services, events, data pipelines, data model, APIs, security, ADRs |
 | [Roadmap](docs/roadmap.md) | Phase checklists, definitions of done, progress log |
+| [UI plan](docs/ui-plan.md) | Phase 8 design system, screens against the API, milestones |
 | [Data lineage](docs/data-lineage.md) | Warehouse layers, where every column comes from, data-quality checks |
 | [NAV scenarios](docs/nav-scenarios.md) | Three NAV calculations worked out by hand |
 | [Event schemas](docs/events.md) | Kafka envelope; trade, position, price, valuation and limit events |
