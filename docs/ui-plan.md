@@ -31,20 +31,20 @@ file and resolve a break, entirely from the UI.
 
 | Concern | Choice | Notes |
 |---|---|---|
-| Build | Vite, React 18, TypeScript (`strict`) | Node 24 (installed in Phase 0); `npm` |
+| Build | Vite 8, React 19, TypeScript 7 (`strict`, `noUncheckedIndexedAccess`) | Node 24 (installed in Phase 0); `npm` |
 | Styling | Tailwind CSS with design tokens (§3) | No component theme to fight; every visual decision is ours |
 | Primitives | Radix UI (dialog, dropdown menu, popover, tabs, tooltip, select, toast) | Accessible behaviour and keyboard support, no styling |
-| Tables | TanStack Table | Sorting, column alignment, server pagination |
+| Tables | TanStack Table 9 (`tableFeatures` + `useTable`) | Typed column meta for alignment, server pagination |
 | Server state | TanStack Query | Caching, polling, loading and error states |
 | HTTP | Axios, one module per backend service in `src/api/` | JWT and refresh interceptor (§5) |
-| Routing | React Router | Protected and role-checked routes |
+| Routing | React Router 8 | Protected and role-checked routes |
 | Forms | React Hook Form + Zod | Schemas mirror the backend validation |
 | Charts | Recharts, restyled (§3.6) | Line/area, donut, stacked bars |
-| Icons | Lucide, 16–18 px, 1.5 px stroke | Monochrome, never on coloured backgrounds |
+| Icons | Phosphor, 13–20 px, regular/light weight | Monochrome, never on coloured backgrounds |
 | Fonts | Newsreader (serif), Inter (sans), self-hosted via `@fontsource` | Works offline, like the rest of the stack |
 | Dates | `date-fns` with the `Asia/Kolkata` zone | Matches the backend's market clock |
 | Tests | Vitest, React Testing Library, MSW, `@testing-library/user-event` | Mocked API; no backend needed |
-| Lint/format | ESLint (typescript-eslint, react-hooks, jsx-a11y), Prettier | Run in CI in Phase 9 |
+| Lint | oxlint (react, typescript rules; the Vite template default) | Run in CI in Phase 9 |
 | Serve | nginx (multi-stage Docker image) | Proxies `/api` to the gateway (§9) |
 
 ---
@@ -444,7 +444,7 @@ Each milestone ends with its tests green, the roadmap ticked and a commit on `de
 | # | Milestone | Contents | Roadmap items |
 |---|---|---|---|
 | M0 | Backend prerequisites — **done** | B0, B1, B2 with tests | — |
-| M1 | Foundation and style guide | Vite + TS scaffold, Tailwind tokens, fonts, `lib/format`, every §3.5 component, `/style-guide` page — **review point** | Scaffold; UI library and theme |
+| M1 | Foundation and style guide (built; awaiting review) | Vite + TS scaffold, Tailwind tokens, fonts, `lib/format`, every §3.5 component, `/style-guide` page — **review point** | Scaffold; UI library and theme |
 | M2 | Shell and auth | Login, AuthProvider, Axios interceptors and refresh, access matrix, route guards, sidebar, top bar, global search, notification bell | Axios client with JWT; routing and role menus; login |
 | M3 | Overview, positions, valuation | §6.2, §6.5, §6.6 (cash and liabilities included) | Portfolio dashboard; positions with source badge |
 | M4 | Trades | Blotter, new trade, CSV upload, detail and audit, cancel/settle | Blotter; create-trade form |
