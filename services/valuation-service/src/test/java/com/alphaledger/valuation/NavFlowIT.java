@@ -113,7 +113,9 @@ class NavFlowIT {
                 .andExpect(jsonPath("$.balance").value(85000.00))
                 .andExpect(jsonPath("$.transactions.length()").value(2))
                 .andExpect(jsonPath("$.transactions[0].type").value("TRADE_BUY"))
-                .andExpect(jsonPath("$.transactions[0].reference_id").value("TR-NAV-1"));
+                .andExpect(jsonPath("$.transactions[0].reference_id").value("TR-NAV-1"))
+                .andExpect(jsonPath("$.transactions[0].effective_date").value("2026-10-14"))   // ISO date, no time
+                .andExpect(jsonPath("$.transactions[1].effective_date").value("2026-10-13"));
 
         // Withdrawing more than the balance is refused.
         mockMvc.perform(post("/api/v1/portfolios/7/cash").header("Authorization", OPS)
@@ -160,6 +162,7 @@ class NavFlowIT {
         mockMvc.perform(get("/api/v1/portfolios/7/valuation/history").param("from", "2026-10-01")
                         .header("Authorization", AUDITOR))
                 .andExpect(jsonPath("$[0].valuation_basis").value("FULL_NAV"))
+                .andExpect(jsonPath("$[0].as_of_date").value("2026-10-15"))
                 .andExpect(jsonPath("$[0].cash_balance").value(85000.00))
                 .andExpect(jsonPath("$[0].total_liabilities").value(2505.96))
                 .andExpect(jsonPath("$[0].nav").value(299949.04));

@@ -427,8 +427,8 @@ Done before or alongside the screens that need them (small, separate commits):
 | # | Change | Needed by | Why |
 |---|---|---|---|
 | B0 | Refresh token in an HttpOnly cookie for browsers, row-locked rotation, key-bound replay — **done** ([auth-session.md](auth-session.md)) | Login, session restore | Script on the page must never read the refresh token |
-| B1 | Return dates as `yyyy-MM-dd` everywhere a service returns rows as maps (valuation history, cash, liabilities, recon runs and breaks, ledger, limit breaches) | All tables | Today they serialise as `2026-10-15T00:00:00.000Z`; analytics already fixed (Phase 7) |
-| B2 | `GET /api/v1/auth/users/directory` for any signed-in user: `id`, `fullName`, `role` (no emails, no status) | Break assignment, audit timelines, assignee column | `/auth/users` is Admin-only, so Ops cannot pick an assignee or see names |
+| B1 | **Done:** dates as `yyyy-MM-dd` everywhere a service returns rows as maps (valuation history, cash, liabilities, recon runs and breaks, ledger, limit breaches) | All tables | Today they serialise as `2026-10-15T00:00:00.000Z`; fixed once in `common` (`SqlDateJsonModule`) for every service |
+| B2 | **Done:** `GET /api/v1/auth/users/directory` for any signed-in user: `id`, `fullName`, `role` (no emails, no status) | Break assignment, audit timelines, assignee column | `/auth/users` is Admin-only, so Ops cannot pick an assignee or see names |
 | B3 | Check every list endpoint used by the UI returns what the screen needs without N+1 calls; instrument names come from one cached `GET /instruments` (29 instruments) | Blotter, positions | Avoids a call per row |
 
 Follow-ups, not in Phase 8:
@@ -443,7 +443,7 @@ Each milestone ends with its tests green, the roadmap ticked and a commit on `de
 
 | # | Milestone | Contents | Roadmap items |
 |---|---|---|---|
-| M0 | Backend prerequisites | B0 (done), B1, B2 with tests | — |
+| M0 | Backend prerequisites — **done** | B0, B1, B2 with tests | — |
 | M1 | Foundation and style guide | Vite + TS scaffold, Tailwind tokens, fonts, `lib/format`, every §3.5 component, `/style-guide` page — **review point** | Scaffold; UI library and theme |
 | M2 | Shell and auth | Login, AuthProvider, Axios interceptors and refresh, access matrix, route guards, sidebar, top bar, global search, notification bell | Axios client with JWT; routing and role menus; login |
 | M3 | Overview, positions, valuation | §6.2, §6.5, §6.6 (cash and liabilities included) | Portfolio dashboard; positions with source badge |

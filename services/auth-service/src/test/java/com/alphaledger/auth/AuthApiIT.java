@@ -138,6 +138,25 @@ class AuthApiIT {
     }
 
     @Test
+    void anySignedInUserCanReadTheDirectoryButNotTheUserAdministration() throws Exception {
+        String ops = "Bearer " + accessToken("rohan.ops@alphaledger.test");
+
+        mockMvc.perform(get("/api/v1/auth/users/directory").header("Authorization", ops))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == 3)].fullName").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.id == 3)].role").value("OPS_ANALYST"))
+                .andExpect(jsonPath("$[?(@.id == 3)].active").value(true))
+                .andExpect(jsonPath("$[0].email").doesNotExist())
+                .andExpect(jsonPath("$[0].status").doesNotExist())
+                .andExpect(jsonPath("$[0].createdAt").doesNotExist());
+        mockMvc.perform(get("/api/v1/auth/users/directory")).andExpect(status().isUnauthorized());
+
+        // The full user list, with emails, stays Admin-only.
+        mockMvc.perform(get("/api/v1/auth/users").header("Authorization", ops)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/auth/users/3").header("Authorization", ops)).andExpect(status().isForbidden());
+    }
+
+    @Test
     void createUserValidatesInput() throws Exception {
         mockMvc.perform(post("/api/v1/auth/users").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"not-an-email\",\"password\":\"short\",\"fullName\":\"\",\"role\":null}")

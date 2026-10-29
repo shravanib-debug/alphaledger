@@ -1,6 +1,7 @@
 package com.alphaledger.auth.service;
 
 import java.time.Clock;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.data.domain.Sort;
@@ -10,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.alphaledger.auth.domain.UserAccount;
 import com.alphaledger.auth.dto.CreateUserRequest;
+import com.alphaledger.auth.dto.DirectoryEntry;
 import com.alphaledger.auth.dto.UserResponse;
 import com.alphaledger.auth.repository.UserAccountRepository;
 import com.alphaledger.common.error.ConflictException;
@@ -42,6 +44,15 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> list() {
         return users.findAll(Sort.by("id")).stream().map(UserResponse::from).toList();
+    }
+
+    /** Every user, active first then by name, with only the fields the directory shows. */
+    @Transactional(readOnly = true)
+    public List<DirectoryEntry> directory() {
+        return users.findAll(Sort.by("fullName", "id")).stream()
+                .map(DirectoryEntry::from)
+                .sorted(Comparator.comparing(DirectoryEntry::active).reversed())
+                .toList();
     }
 
     @Transactional(readOnly = true)

@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-275%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-278%20passing-success)
 
 ---
 
@@ -341,7 +341,7 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
 | Smoke | 44 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **275 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **278 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
 
 ---
 

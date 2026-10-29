@@ -630,6 +630,7 @@ dq_check_result(id, check_name, run_at, status, details)
 | Auth | `POST /api/v1/auth/login` | Login, returns JWT + refresh token (body for API clients; HttpOnly cookie for browsers sending `X-Client: web`) |
 | Auth | `POST /api/v1/auth/refresh` | Rotate refresh token, new access token |
 | Auth | `POST /api/v1/auth/logout` | Revoke a refresh token |
+| Auth | `GET /api/v1/auth/users/directory` | ID, name, role and active flag of every user, for any signed-in user (assignee pickers, names in audit trails); no emails |
 | Auth | `GET /api/v1/auth/me` | Current user |
 | Auth | `GET/POST /api/v1/auth/users`, `GET /api/v1/auth/users/{id}` | List / create / get users (Admin) |
 | Portfolio | `GET/POST /api/v1/portfolios`, `GET/PUT /api/v1/portfolios/{id}` | List / create / get / update portfolios |
