@@ -10,13 +10,14 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-278%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-312%20passing-success)
 
 ---
 
 ## Contents
 - [What it does](#what-it-does)
 - [Project status](#project-status)
+- [Dashboard](#dashboard)
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Data: real prices, synthetic transactions](#data-real-prices-synthetic-transactions)
@@ -39,13 +40,13 @@ match the custodian's.**
 | **Portfolios & instruments** | Portfolios split into funds by asset class (Private Equity, Credit, Real Estate); instruments keyed by **ISIN** with check-digit validation; a PM changes only the portfolios they manage | ✅ Built |
 | **Trade capture** | BUY/SELL trades in INR with **T+1 settlement on NSE business days**, a status lifecycle (NEW → VALIDATED → SETTLED, REJECTED, CANCELLED), a full audit trail, idempotent trade references, CSV bulk upload, automatic settlement | ✅ Built |
 | **Events** | Every change is published to **Kafka** through a transactional outbox: `trade.*`, `position.updated`, `price.updated`, `valuation.calculated`, `limit.breached`; consumers are idempotent | ✅ Built |
-| **Market data** | Pluggable price sources; **real NSE and AMFI closing prices** for listed instruments and mutual funds, synthetic Level 3 marks for private holdings; every price shows its source, date and whether it is stale | 🟨 Foundation built; live NSE/AMFI downloads later |
+| **Market data** | Pluggable price sources; **real NSE and AMFI closing prices** for listed instruments and mutual funds, synthetic Level 3 marks for private holdings; every price shows its source, date and whether it is stale | ✅ Built |
 | **Positions & valuation** | Holdings and weighted-average cost rebuilt from trade events (exact cancels, realized P&L); live Market Value, unrealized P&L and exposure by asset class and instrument, every line with its price source; end-of-day snapshots and asset-class limits with breach alerts | ✅ Built |
 | **NAV** | NAV = market value + cash − liabilities, with each part shown. Cash comes from an append-only ledger (deposits, withdrawals, settled trades). Liabilities cover fees, expenses, payables and borrowings, plus a daily management-fee accrual | ✅ Built |
 | **Reconciliation** (signature feature) | Match a custodian file to settled trades on `trade ref + ISIN + trade date`; detect missing, quantity and price breaks; assign, resolve and escalate with an audit trail | ✅ Done |
 | **Notifications & resilience** | In-app and email alerts (MailHog) for reconciliation breaks (Ops) and limit breaches (PMs), with per-user read state and a daily open-breaks digest. Every Kafka consumer retries with backoff, then dead-letters the record and moves on; Admin can list and replay dead letters. Per-route circuit breakers, GET retries and per-user rate limiting at the gateway; retry and circuit breaker on service-to-service calls; correlation IDs across HTTP and Kafka | ✅ Built |
 | **Analytics** | Nightly Spring Batch ETL from the service databases into a staging → star schema → mart warehouse (`analytics_db`), with 20+ data-quality checks (row counts, nulls, uniqueness, referential, sanity) that fail the run on critical errors; AUM by asset class, daily P&L, break trend and break ageing views and APIs | ✅ Built |
-| **Dashboard** | React UI for PMs and Operations Analysts | ⬜ Planned |
+| **Dashboard** | React UI for all four roles: overview, trades, positions, NAV, reconciliation, notifications, analytics and administration, with role-based menus and routes | ✅ Built |
 
 **Personas** (demo users): Priya (Portfolio Manager), Rohan (Operations Analyst), Anita (Admin), Vikram (Auditor).
 
@@ -65,11 +66,25 @@ match the custodian's.**
 | 5 | Reconciliation engine | ✅ |
 | 6 | Notifications and resilience | ✅ |
 | 7 | Data engineering and analytics | ✅ |
-| 8 | React frontend | ⬜ Next |
-| 9 | CI/CD, quality gates, observability | ⬜ |
+| 8 | React frontend | ✅ |
+| 9 | CI/CD, quality gates, observability | ⬜ Next |
 | 10 | Polish, docs, demo | ⬜ |
 
 Detailed checklists and a progress log: [docs/roadmap.md](docs/roadmap.md).
+
+---
+
+## Dashboard
+
+Run the stack and open http://localhost:3000. Demo users and their password are in [docs/manual-testing.md](docs/manual-testing.md).
+
+| Overview | Trade blotter |
+|---|---|
+| ![Overview](docs/screenshots/02-overview.png) | ![Trade blotter](docs/screenshots/03-trade-blotter.png) |
+
+| Valuation & NAV | Break detail |
+|---|---|
+| ![Valuation and NAV](docs/screenshots/06-valuation-nav.png) | ![Break detail](docs/screenshots/08-break-detail.png) |
 
 ---
 
@@ -79,7 +94,7 @@ Each service owns its database, exposes REST through one gateway, and talks to t
 
 ```mermaid
 flowchart LR
-    UI[React dashboard<br/>Phase 8] -->|HTTPS + JWT| GW[API Gateway<br/>JWT check, routing]
+    UI[React dashboard] -->|HTTPS + JWT| GW[API Gateway<br/>JWT check, routing]
     GW --> AUTH[auth-service]
     GW --> PF[portfolio-service]
     GW --> TR[trade-service]
@@ -207,13 +222,15 @@ Requires **JDK 21** and **Docker Desktop**. Maven is not needed: the Maven Wrapp
 ```bash
 ./mvnw verify                                             # build all modules and run all tests
 docker compose -f infra/docker-compose.yml up -d --build  # start the stack (first build takes a few minutes)
-bash scripts/smoke-test.sh                                # 38 end-to-end checks through the gateway
+bash scripts/smoke-test.sh                                # 62 end-to-end checks through the gateway and dashboard
 bash scripts/demo-trades.sh                               # optional: 20 demo trades at real 14-Oct-2026 closes
 docker compose -f infra/docker-compose.yml down           # stop (add -v to also delete the Postgres data)
 ```
 
+The dashboard is at **http://localhost:3000**; the step-by-step guide is [docs/manual-testing.md](docs/manual-testing.md).
+
 The stack runs fully offline. Settings (database password, JWT signing key, demo password) can be overridden by
-copying `infra/.env.example` to `infra/.env`. The full stack (12 containers) uses about 4.5 GB of memory.
+copying `infra/.env.example` to `infra/.env`. The full stack (16 containers) uses about 4.5 GB of memory.
 
 | URL | What |
 |---|---|
@@ -339,9 +356,10 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 |---|---|---|
 | Unit | Trade state machine, T+1 and holiday rules, holding checks, position math (average cost, realized P&L, exact cancels), valuation and exposure (three hand-calculated scenarios), token issuing and rotation, ISIN check digits, price validation the synthetic-price rule, reconciliation matching (every break type, tolerance boundaries) and the break workflow | JUnit 5, AssertJ, Mockito |
 | Integration (`*IT`) | Each service end to end against real PostgreSQL and Kafka: migrations, security, idempotency, duplicate events, events on the topics, Spring Batch runs | Spring Boot Test, MockMvc, Testcontainers |
-| Smoke | 44 checks against the running Docker stack through the gateway: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
+| Component (frontend) | Key UI flows, including token refresh, against a mocked API | Vitest, React Testing Library, MSW |
+| Smoke | 62 checks against the running Docker stack through the gateway and dashboard: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **278 automated tests**, all passing (`./mvnw verify`; integration tests need Docker running).
+Currently **312 automated tests**, all passing: 278 backend (`./mvnw verify`; integration tests need Docker running) and 34 frontend (`npm test` in `frontend/`).
 
 ---
 
@@ -355,7 +373,7 @@ Currently **278 automated tests**, all passing (`./mvnw verify`; integration tes
 | `infra/` | Docker Compose stack, shared service Dockerfile, Postgres init, `.env.example` |
 | `scripts/` | Smoke test, demo trade loader, custodian file generator, market-data download and sample scripts |
 | `docs/` | PRD, architecture, roadmap, events, conventions, Postman collection |
-| `frontend/` | React dashboard (Phase 8) |
+| `frontend/` | React dashboard, Dockerfile and nginx config |
 
 ---
 
@@ -390,6 +408,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | [Roadmap](docs/roadmap.md) | Phase checklists, definitions of done, progress log |
 | [Browser sessions](docs/auth-session.md) | Refresh-token cookie, CSRF checks, rotation, reuse and replay rules, frontend contract |
 | [UI plan](docs/ui-plan.md) | Phase 8 design system, screens against the API, milestones |
+| [Manual testing](docs/manual-testing.md) | Step-by-step UI walkthrough, screenshots, presenter notes |
 | [Data lineage](docs/data-lineage.md) | Warehouse layers, where every column comes from, data-quality checks |
 | [NAV scenarios](docs/nav-scenarios.md) | Three NAV calculations worked out by hand |
 | [Event schemas](docs/events.md) | Kafka envelope; trade, position, price, valuation and limit events |

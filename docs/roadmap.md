@@ -22,7 +22,7 @@
 | 5 | Reconciliation Engine | File ingest, matching, breaks, workflow, audit | ✅ |
 | 6 | Notifications & Resilience | Notifications, DLQ, retries, circuit breakers | ✅ |
 | 7 | Data Engineering & Analytics | Analytics ETL, star schema, DQ checks, views | ✅ |
-| 8 | Frontend (React) | Dashboard, blotter, positions, recon UI | ⬜ |
+| 8 | Frontend (React) | Dashboard, blotter, positions, recon UI | ✅ |
 | 9 | CI/CD, Quality & Observability | Pipelines, coverage gate, Sonar, monitoring | ⬜ |
 | 10 | Polish, Docs & Demo | README, diagrams, demo data, walkthrough | ⬜ |
 | 11 | Stretch Goals (optional) | Flink/Spark, Snowflake, K8s, cloud | ⬜ |
@@ -342,25 +342,25 @@
 ### Setup
 - [x] Scaffold React + Vite (+ TypeScript) app
 - [x] Choose UI library and set up theme/layout (Tailwind 4 + Radix, own components; `/style-guide`)
-- [ ] Axios client with JWT interceptor and refresh handling
-- [ ] Routing with protected routes and role-based menus
+- [x] Axios client with JWT interceptor and refresh handling
+- [x] Routing with protected routes and role-based menus
 
 ### Screens
-- [ ] Login page
-- [ ] Portfolio dashboard (Market Value / NAV, P&L cards, allocation pie, valuation trend line)
-- [ ] Trade blotter (table, filters, pagination, status badges)
-- [ ] Create-trade form with validation
-- [ ] Positions page per portfolio, with a source badge (`source` + `data_date`) next to every price and a stale indicator
-- [ ] Reconciliation page (upload file, run summary, break list with filters)
-- [ ] Break detail page (internal vs external comparison, assign, resolve, escalate, audit history)
-- [ ] Notifications bell and list
-- [ ] Analytics page (break trend, AUM by asset class)
+- [x] Login page
+- [x] Portfolio dashboard (Market Value / NAV, P&L cards, allocation pie, valuation trend line)
+- [x] Trade blotter (table, filters, pagination, status badges)
+- [x] Create-trade form with validation
+- [x] Positions page per portfolio, with a source badge (`source` + `data_date`) next to every price and a stale indicator
+- [x] Reconciliation page (upload file, run summary, break list with filters)
+- [x] Break detail page (internal vs external comparison, assign, resolve, escalate, audit history)
+- [x] Notifications bell and list
+- [x] Analytics page (break trend, AUM by asset class)
 
 ### Quality
-- [ ] Loading, empty, and error states on every screen
-- [ ] Responsive layout
-- [ ] Component tests (Vitest + React Testing Library) for key flows
-- [ ] Dockerfile + nginx config for the frontend
+- [x] Loading, empty, and error states on every screen
+- [x] Responsive layout
+- [x] Component tests (Vitest + React Testing Library) for key flows
+- [x] Dockerfile + nginx config for the frontend
 
 **DoD:** A user can log in, create a trade, see market value change, upload a custodian file, and resolve a break, entirely from the UI.
 
@@ -481,3 +481,4 @@ Pick based on remaining time and the JD's "add-on" skills.
 | 2026-10-29 | 8 (M0) | Browser sessions (B0, ADR 24, `docs/auth-session.md`). Review found a race in refresh (no row lock: two concurrent refreshes of one token both rotated it, forking the chain undetected) and a disabled user's refresh leaving the new token active; both fixed. auth-service V3: rotation chain (`revoked_reason`, `revoked_at`, `replaced_by`, `rotation_key_hash`); rotation under `SELECT ... FOR UPDATE`; reuse still revokes every token of the user. Browsers (`X-Client: web`) get the refresh token only in a `Secure; HttpOnly; SameSite=Strict` cookie on `/api/v1/auth` (`__Secure-` prefix; Secure off only in the local plain-HTTP compose), never in a body; Origin (exact, single) and `Sec-Fetch-Site` checks, JSON-only bodies; API clients keep the body flow unchanged. Lost-response replay bound to the request's `Idempotency-Key` (hash only), 30 s window, unused successor superseded so one token stays valid; no grace period. Gateway CORS allows the Vite dev origin (`FRONTEND_ORIGINS`). Tests: 275 total (cookie flags, CSRF, expiry, 8 concurrent refreshes, same-key retries, replay, reuse, disabled user); smoke test adds cookie checks. B1 and B2 still to do. |
 | 2026-10-29 | 8 (M0) | M0 complete. B1: `java.sql.Date` (DATE columns returned as row maps) now serialises as `yyyy-MM-dd` in every servlet service via `SqlDateJsonModule` in common, instead of a midnight-UTC timestamp. B2: `GET /api/v1/auth/users/directory` for any signed-in user (ID, name, role, active; no emails) for assignee pickers and audit-trail names; user administration stays Admin-only. Tests: 278 total. |
 | 2026-10-30 | 8 (M1) | Design foundation built (review point). `frontend/`: Vite 8, React 19, TypeScript 7 strict, Tailwind 4 tokens (ivory, espresso, burgundy as signal only, gain/loss/warn), self-hosted Newsreader + Inter, one radius scale (2px/4px), no shadows except floating layers. `lib/format.ts`: Indian grouping, lakh/crore, signed P&L, IST dates without day shift. Components: PageHeader, Section, Panel, FigureRow, DataTable (TanStack Table 9, server paging, loading/empty/error), Tag/StatusTag, SourceBadge (stale in words), Money/Pnl/Price/Missing (missing never zero, P&L not colour-only), Field/Input/NumberInput/Textarea/Select, Dialog, Tabs, Tooltip, StatusStrip. `/style-guide` (development only) with sample rows from the demo instruments. 22 frontend tests (Vitest + Testing Library); oxlint and build clean. |
+| 2026-10-30 | 8 | Phase 8 complete. All screens (login, overview, portfolios, trades, positions, valuation, reconciliation, notifications, analytics, administration) with role-based routing, JWT refresh, loading/empty/error states, 34 frontend tests, Docker image with nginx on port 3000. DoD run in a real browser on the Docker stack: login, trade booked, market value changed, custodian file uploaded, break assigned and resolved with audit trail. Tests: 312 total (278 backend, 34 frontend); smoke test 62/62. |
