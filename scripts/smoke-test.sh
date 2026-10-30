@@ -248,7 +248,7 @@ check "MailHog received the break email"      "http://localhost:8025/api/v2/mess
 # ---------- Phase 7: analytics ----------
 check "analytics-service registered"          "$EUREKA/eureka/apps/ANALYTICS-SERVICE" '"ANALYTICS-SERVICE"'
 expect_status "PM cannot start an ETL run (403)" 403 -X POST -H "Authorization: Bearer $PM_TOKEN"     "$GATEWAY/api/v1/analytics/etl-runs"
-etl=$(curl -sS -X POST -H "Authorization: Bearer $ADMIN_TOKEN"     "$GATEWAY/api/v1/analytics/etl-runs?date=$(TZ=Asia/Kolkata date +%F)&fullRefresh=true" || true)
+etl=$(curl -sS -X POST -H "Authorization: Bearer $ADMIN_TOKEN"     "$GATEWAY/api/v1/analytics/etl-runs?date=$(date -u -d '+5 hours 30 minutes' +%F)&fullRefresh=true" || true)   # today in IST (TZ= is ignored by Git Bash)
 if [[ "$etl" == *'"status":"COMPLETED"'* ]]; then
     echo "PASS  analytics ETL full refresh completed with data-quality checks passing"
 else
@@ -256,6 +256,25 @@ else
 fi
 await_json "break trend includes the smoke break (recon_db -> warehouse)"     "$GATEWAY/api/v1/analytics/break-trend?from=2026-10-01" '"break_type":"MISSING_INTERNAL"'
 expect_status "AUM by asset class (200)"       200 -H "Authorization: Bearer $AUDITOR_TOKEN"     "$GATEWAY/api/v1/analytics/aum-by-asset-class"
+
+# ---------- Phase 8: dashboard (nginx on :3000, /api proxied to the gateway) ----------
+DASHBOARD=${DASHBOARD:-http://localhost:3000}
+check "dashboard serves the app"              "$DASHBOARD/" '<div id="root">'
+headers=$(curl -sSI "$DASHBOARD/trades" || true)
+if [[ "$headers" == *"200"* && "$headers" == *"Content-Security-Policy"* && "$headers" == *"X-Frame-Options: DENY"* ]]; then
+    echo "PASS  dashboard deep link served with security headers"
+else
+    echo "FAIL  dashboard deep link / headers"; failures=$((failures + 1))
+fi
+jar="smoke-ui-$$.txt"
+ui_login=$(curl -sS -c "$jar" -X POST "$DASHBOARD/api/v1/auth/login" -H 'Content-Type: application/json'     -H 'X-Client: web' -H "Origin: $DASHBOARD"     -d '{"email":"rohan.ops@alphaledger.test","password":"'"$DEMO_PASSWORD"'"}' || true)
+ui_refresh=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' -X POST "$DASHBOARD/api/v1/auth/refresh"     -H 'Content-Type: application/json' -H 'X-Client: web' -H "Origin: $DASHBOARD" -d '{}' || true)
+if [[ "$ui_login" == *accessToken* && "$ui_login" != *refreshToken* && "$ui_refresh" == 200 ]]; then
+    echo "PASS  sign-in and cookie refresh through the dashboard's /api proxy"
+else
+    echo "FAIL  dashboard proxy sign-in ($ui_refresh): $ui_login"; failures=$((failures + 1))
+fi
+rm -f "$jar"
 
 if (( failures > 0 )); then
     echo "$failures check(s) failed"

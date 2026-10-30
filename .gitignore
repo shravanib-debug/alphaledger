@@ -30,5 +30,8 @@ Thumbs.db
 *.pem
 *.key
 
+# Generated custodian files (scripts/generate-custodian-file.py)
+/custodian-*.csv
+
 # Market data: raw downloads are never committed (see docs/architecture.md §5.8)
 data/market-cache/

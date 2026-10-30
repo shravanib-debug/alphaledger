@@ -348,5 +348,17 @@ services:
       config-server:
         condition: service_healthy
 
+  # ---------- Dashboard ----------
+  # React app on nginx; /api is proxied to the gateway on the same origin (frontend/nginx.conf).
+  frontend:
+    build:
+      context: ../frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+
 volumes:
   postgres-data:

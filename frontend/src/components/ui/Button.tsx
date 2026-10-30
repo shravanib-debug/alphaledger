@@ -1,4 +1,5 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react'
+import { Link, type LinkProps } from 'react-router'
 
 import { cn } from '../../lib/cn'
 
@@ -23,6 +24,16 @@ const SIZES: Record<Size, string> = {
   sm: 'h-7 px-2.5 text-[12px]',
 }
 
+function buttonClass(variant: Variant, size: Size, className?: string): string {
+  return cn(
+    'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] font-medium',
+    'transition-colors duration-[120ms] disabled:cursor-not-allowed disabled:opacity-45',
+    VARIANTS[variant],
+    SIZES[size],
+    className,
+  )
+}
+
 /** Square-cornered (2px), single-line, never pill-shaped. Disabled buttons keep their shape and lose contrast. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'secondary', size = 'md', className, type = 'button', ...props },
@@ -32,14 +43,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       type={type}
-      className={cn(
-        'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] font-medium',
-        'transition-colors duration-[120ms] disabled:cursor-not-allowed disabled:opacity-45',
-        VARIANTS[variant],
-        SIZES[size],
-        className,
-      )}
+      className={buttonClass(variant, size, className)}
       {...props}
     />
   )
 })
+
+/** A navigation link styled as a button (a real <a>, not a button inside a link). */
+export function ButtonLink({ variant = 'secondary', size = 'md', className, ...props }: LinkProps & { variant?: Variant; size?: Size }) {
+  return <Link className={buttonClass(variant, size, className)} {...props} />
+}

@@ -20,9 +20,9 @@ export function StatusStrip({ icon: IconComponent, label, value, detail, href }:
       <IconComponent size={20} weight="light" className="shrink-0 text-grey" aria-hidden />
       <span className="min-w-0 flex-1">
         <span className="type-meta block">{label}</span>
-        <span className="flex items-baseline gap-3">
-          <span className="font-serif text-[24px] leading-8 tabular text-burgundy">{value}</span>
-          {detail && <span className="type-meta truncate">{detail}</span>}
+        <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <span className="whitespace-nowrap font-serif text-[24px] leading-8 tabular text-burgundy">{value}</span>
+          {detail && <span className="type-meta">{detail}</span>}
         </span>
       </span>
       <CaretRight size={14} className="shrink-0 text-grey transition-transform duration-[120ms] group-hover:translate-x-0.5" />
