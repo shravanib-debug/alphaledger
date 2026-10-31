@@ -47,6 +47,13 @@ alphaledger:
   recon:
     price-tolerance: 0.01      # INR; quantities must match exactly
     sla-days: 3                # breaks open longer than this are flagged overdue
+    batch:
+      chunk-size: 500
+      grid-size: 4             # parallel staging partitions; keep well below the connection pool size
+      retry-limit: 3           # attempts after a transient database failure
+      skip-limit: 100          # rows the database may refuse, per partition, before the run fails
+      stale-after: PT30M       # RUNNING for longer than this means the instance died; must exceed the longest run
+      recovery-interval-ms: 300000
   outbox:
     relay:
       poll-interval-ms: 500

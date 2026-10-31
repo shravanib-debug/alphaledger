@@ -69,6 +69,7 @@ public class ReconMatchService {
         int errorRows = repository.errorCount(runId);
         repository.completeRun(runId, external.size() + errorRows, errorRows, internal.size(), result.matched(),
                 byType, clock.instant());
+        repository.deleteRawRows(runId);
         log.info("Reconciliation run {} ({}): {} matched, breaks {}", runId, runDate, result.matched(), byType);
         return result;
     }

@@ -62,9 +62,16 @@ public class ReconController {
         if (file.isEmpty()) {
             throw new ValidationException("file: is empty");
         }
-        ReconRunService.RunOutcome outcome = runs.start(file.getBytes(), file.getOriginalFilename(), runDate,
+        ReconRunService.RunOutcome outcome = runs.start(file, file.getSize(), file.getOriginalFilename(), runDate,
                 source.trim(), AuthenticatedUser.from(authentication).id());
         return ResponseEntity.status(outcome.duplicate() ? HttpStatus.OK : HttpStatus.CREATED).body(outcome.run());
+    }
+
+    /** Resumes a FAILED run from its last committed work; 409 for any other status. */
+    @PostMapping("/runs/{id}/restart")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPS_ANALYST')")
+    public Map<String, Object> restartRun(@PathVariable long id) {
+        return runs.restart(id);
     }
 
     @GetMapping("/runs")

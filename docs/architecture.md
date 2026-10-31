@@ -392,7 +392,7 @@ for key in internal not in external   -> MISSING_EXTERNAL
 - **Match key and ISIN:** `matchKey = trade_ref + isin + trade_date`. Custodian files identify securities by ISIN, not by our internal `instrument_id` or the exchange symbol (symbols can change and differ between NSE and BSE). The ISIN comes from the `trade.settled` payload into `settled_trade_view`, so matching needs no call to portfolio-service. A custodian row whose ISIN is unknown is still staged and surfaces as `MISSING_INTERNAL`.
 - **Performance:** hash-map matching, chunk size 500, batch inserts. Target is 10k records in under 30 s.
 - **Idempotency:** file checksum + `(run_date, source)` unique constraint. Re-uploading the same file for the same date returns the existing run (HTTP 200) and creates nothing.
-- **As built (Phase 5):** a Spring Batch job with two steps: `stageCustodianRecords` (reader over the stored file → `CustodianRowValidator` → batch writer, chunk 500) and `matchAndRaiseBreaks` (one transaction: engine run, breaks, `CREATED` audit rows, outbox events, run summary). Rows are rejected for a wrong column count, bad ISIN, unknown side, bad dates, non-positive numbers, `settle_date` not equal to the run date, or a duplicate match key in the file. Quantities are compared signed (SELL negative), so a side mismatch is a quantity break. A failed job marks the run `FAILED` with the error.
+- **As built:** a Spring Batch job with four steps: `loadRawRows` (streams the stored file in 1 MB slices into `custodian_raw_row`), `stageCustodianRecords` (row-range partitions, `alphaledger.recon.batch.grid-size`, default 4; each runs `CustodianRowValidator` → batch writer, chunk 500), `flagDuplicates` (set-based; the earliest row of a match key stays) and `matchAndRaiseBreaks` (one transaction: engine run, breaks, `CREATED` audit rows, outbox events, run summary, raw-row cleanup). Transient database failures are retried; a row the database refuses is skipped and recorded in `custodian_record_error`, up to `skip-limit` per partition. A `FAILED` run resumes through `POST /api/v1/recon/runs/{id}/restart` or by uploading the same file again; a run left `RUNNING` longer than `stale-after` is marked `FAILED` so it can be restarted. Rows are rejected for a wrong column count, bad ISIN, unknown side, bad dates, non-positive numbers, `settle_date` not equal to the run date, or a duplicate match key in the file. Quantities are compared signed (SELL negative), so a side mismatch is a quantity break. A failed job marks the run `FAILED` with the error.
 - **Break workflow:** `OPEN → IN_REVIEW` (assign) `→ ESCALATED` (escalate), and `IN_REVIEW`/`ESCALATED → RESOLVED` with `ACCEPT_EXTERNAL`, `ADJUST_INTERNAL` or `KNOWN_DIFFERENCE`. Every action needs a comment, locks the row and writes an immutable `break_action_audit` entry with before/after state. Resolved breaks are never reopened. Ageing: `age_days` and `overdue` (older than `alphaledger.recon.sla-days`, default 3).
 
 ### 5.6 Pipeline 5: Analytics ETL pipeline (data warehouse style)
@@ -587,6 +587,7 @@ recon_run(id, run_date, source, file_name, file_checksum, status, total_records,
           created_by, started_at, completed_at, error_message, UNIQUE(run_date, source, file_checksum))
 custodian_file(run_id FK, content)                    -- raw copy of the uploaded file
 custodian_record(id, run_id FK, trade_ref, isin, trade_date, quantity, price, raw_row)
+custodian_raw_row(run_id, row_number, line)           -- file lines of a run in progress
 custodian_record_error(id, run_id, row_number, error_message, raw_row)
 settled_trade_view(trade_id, trade_ref, portfolio_id, instrument_id, isin, side, quantity, price, trade_date,
                    settle_date, received_at)
@@ -660,6 +661,7 @@ dq_check_result(id, check_name, run_at, status, details)
 | Valuation | `GET /api/v1/marketdata/holidays?year=` | Holiday calendar |
 | Recon | `POST /api/v1/recon/runs` (multipart) | Upload file and start run |
 | Recon | `GET /api/v1/recon/runs/{id}` | Run summary |
+| Recon | `POST /api/v1/recon/runs/{id}/restart` | Resume a failed run |
 | Recon | `GET /api/v1/recon/breaks?status=&type=&runId=` | Break list |
 | Recon | `POST /api/v1/recon/breaks/{id}/assign` | Assign analyst |
 | Recon | `POST /api/v1/recon/breaks/{id}/resolve` | Resolve with action + comment |

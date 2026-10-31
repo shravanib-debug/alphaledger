@@ -3,10 +3,8 @@ package com.alphaledger.reconciliation.run;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 import org.springframework.batch.infrastructure.item.ItemProcessor;
 
@@ -16,8 +14,8 @@ import com.alphaledger.reconciliation.matching.MatchingEngine.ExternalRecord;
 
 /**
  * Validates custodian rows (FR-REC-2): {@code trade_ref,isin,trade_date,settle_date,side,quantity,price}. A bad row is
- * not dropped silently: it becomes a {@code custodian_record_error} with the reason. One instance per run (step scope),
- * so it can also reject duplicate match keys within the file.
+ * not dropped silently: it becomes a {@code custodian_record_error} with the reason. Stateless, so partitions can run
+ * in parallel; duplicate match keys are rejected afterwards by the {@code flagDuplicates} step.
  */
 public class CustodianRowValidator implements ItemProcessor<StagedRow.RawRow, StagedRow> {
 
@@ -25,7 +23,6 @@ public class CustodianRowValidator implements ItemProcessor<StagedRow.RawRow, St
 
     private final long runId;
     private final LocalDate runDate;
-    private final Set<String> seenKeys = new HashSet<>();
 
     public CustodianRowValidator(long runId, LocalDate runDate) {
         this.runId = runId;
@@ -73,10 +70,6 @@ public class CustodianRowValidator implements ItemProcessor<StagedRow.RawRow, St
         if (!settleDate.equals(runDate)) {
             return StagedRow.rejected(runId, row.rowNumber(),
                     "settle_date " + settleDate + " is not the run date " + runDate, raw);
-        }
-        if (!seenKeys.add(tradeRef + "|" + isin + "|" + tradeDate)) {
-            return StagedRow.rejected(runId, row.rowNumber(),
-                    "duplicate trade_ref + isin + trade_date in the file", raw);
         }
         return StagedRow.valid(runId, row.rowNumber(),
                 new ExternalRecord(row.rowNumber(), tradeRef, isin, tradeDate, side, quantity, price), settleDate, raw);

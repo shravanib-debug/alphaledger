@@ -1,5 +1,6 @@
 package com.alphaledger.reconciliation.repository;
 
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.PreparedStatement;
@@ -79,12 +80,28 @@ public class ReconRepository {
         return key.getKey().longValue();
     }
 
-    public void insertFile(long runId, byte[] content) {
-        jdbc.update("INSERT INTO custodian_file (run_id, content) VALUES (?, ?)", runId, content);
+    public void insertFile(long runId, InputStream content, long length) {
+        jdbc.update("INSERT INTO custodian_file (run_id, content) VALUES (?, ?)", ps -> {
+            ps.setLong(1, runId);
+            ps.setBinaryStream(2, content, length);
+        });
     }
 
-    public byte[] fileContent(long runId) {
-        return jdbc.queryForObject("SELECT content FROM custodian_file WHERE run_id = ?", byte[].class, runId);
+    /** Up to {@code length} bytes of the stored file from a zero-based offset; empty past the end. */
+    public byte[] fileSlice(long runId, long offset, int length) {
+        return jdbc.queryForObject("SELECT substring(content FROM ?::int FOR ?::int) FROM custodian_file WHERE run_id = ?",
+                byte[].class, Math.toIntExact(offset + 1), length, runId);
+    }
+
+    /** Puts a failed run back to RUNNING. False when it is not FAILED, so only one caller can restart it. */
+    public boolean reopenRun(long runId, Instant now) {
+        return jdbc.update("UPDATE recon_run SET status = 'RUNNING', error_message = NULL, completed_at = NULL, "
+                + "started_at = ? WHERE id = ? AND status = 'FAILED'", Timestamp.from(now), runId) == 1;
+    }
+
+    public List<Long> runningStartedBefore(Instant cutoff) {
+        return jdbc.queryForList("SELECT id FROM recon_run WHERE status = 'RUNNING' AND started_at < ?", Long.class,
+                Timestamp.from(cutoff));
     }
 
     public void completeRun(long runId, int totalRecords, int errorRows, int internalTrades, int matched,
@@ -116,12 +133,47 @@ public class ReconRepository {
 
     // ---------- staging ----------
 
+    public void insertRawRows(long runId, List<? extends StagedRow.RawRow> rows) {
+        jdbc.batchUpdate("INSERT INTO custodian_raw_row (run_id, row_number, line) VALUES (?, ?, ?) "
+                + "ON CONFLICT (run_id, row_number) DO NOTHING",
+                rows.stream().map(r -> new Object[] {runId, r.rowNumber(), r.line()}).toList());
+    }
+
+    /** Lowest and highest stored row number; {1, 0} (an empty range) when the file has no rows. */
+    public int[] rawRowBounds(long runId) {
+        return jdbc.queryForObject("SELECT COALESCE(min(row_number), 1), COALESCE(max(row_number), 0) "
+                + "FROM custodian_raw_row WHERE run_id = ?", (rs, i) -> new int[] {rs.getInt(1), rs.getInt(2)}, runId);
+    }
+
+    public void deleteRawRows(long runId) {
+        jdbc.update("DELETE FROM custodian_raw_row WHERE run_id = ?", runId);
+    }
+
+    /** Moves every repeat of a match key to the error table; the earliest file row stays. */
+    public void moveDuplicatesToErrors(long runId) {
+        jdbc.update("""
+                WITH dup AS (
+                    SELECT id, row_number, raw_row FROM (
+                        SELECT id, row_number, raw_row, ROW_NUMBER() OVER (
+                            PARTITION BY trade_ref, isin, trade_date ORDER BY row_number) AS occurrence
+                        FROM custodian_record WHERE run_id = ?) ranked
+                    WHERE occurrence > 1
+                ), moved AS (
+                    INSERT INTO custodian_record_error (run_id, row_number, error_message, raw_row)
+                    SELECT ?, row_number, 'duplicate trade_ref + isin + trade_date in the file', raw_row FROM dup
+                    ON CONFLICT (run_id, row_number) DO NOTHING
+                )
+                DELETE FROM custodian_record WHERE id IN (SELECT id FROM dup)
+                """, runId, runId);
+    }
+
     public void insertStaged(List<? extends StagedRow> rows) {
         List<Object[]> records = new ArrayList<>();
         List<Object[]> errors = new ArrayList<>();
         for (StagedRow r : rows) {
             if (r.error() != null) {
-                errors.add(new Object[] {r.runId(), r.rowNumber(), r.error(), r.rawRow()});
+                String error = r.error().length() > 500 ? r.error().substring(0, 500) : r.error();
+                errors.add(new Object[] {r.runId(), r.rowNumber(), error, r.rawRow()});
             } else {
                 ExternalRecord e = r.record();
                 records.add(new Object[] {r.runId(), r.rowNumber(), e.tradeRef(), e.isin(), Date.valueOf(e.tradeDate()),
@@ -133,11 +185,12 @@ public class ReconRepository {
                     INSERT INTO custodian_record (run_id, row_number, trade_ref, isin, trade_date, settle_date, side,
                                                   quantity, price, raw_row)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (run_id, row_number) DO NOTHING
                     """, records);
         }
         if (!errors.isEmpty()) {
             jdbc.batchUpdate("INSERT INTO custodian_record_error (run_id, row_number, error_message, raw_row) "
-                    + "VALUES (?, ?, ?, ?)", errors);
+                    + "VALUES (?, ?, ?, ?) ON CONFLICT (run_id, row_number) DO NOTHING", errors);
         }
     }
 
