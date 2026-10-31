@@ -2,7 +2,7 @@
  * The API client for every service (all through the gateway, same origin). Adds the Bearer token, renews the
  * session once on a 401 and retries the request, and turns failures into ApiError (docs/ui-plan.md §5.4).
  */
-import axios, { type AxiosError, type AxiosRequestConfig } from 'axios'
+import axios, { AxiosHeaders, type AxiosError, type AxiosRequestConfig } from 'axios'
 
 import { accessToken, refreshSession } from '../auth/session'
 import type { ErrorBody } from './types'
@@ -28,11 +28,15 @@ http.interceptors.response.use(undefined, async (error: AxiosError) => {
   const original = error.config as (AxiosRequestConfig & { _retried?: boolean }) | undefined
   if (error.response?.status === 401 && original && !original._retried) {
     original._retried = true
-    try {
-      await refreshSession()
-    } catch {
-      onSessionExpired()
-      throw toApiError(error)
+    // A slow request can fail after another one already renewed the token: then the retry needs no new renewal.
+    const sent = new AxiosHeaders(error.config?.headers).get('Authorization')
+    if (sent === `Bearer ${accessToken()}`) {
+      try {
+        await refreshSession()
+      } catch {
+        onSessionExpired()
+        throw toApiError(error)
+      }
     }
     return http.request(original)
   }
