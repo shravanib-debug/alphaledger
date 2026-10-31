@@ -1,0 +1,133 @@
+# Production overlay for a single server; see docs/deployment.md. Use through infra/deploy.sh.
+# Runs released images, refuses to start without real secrets, and exposes only Caddy (HTTPS on 80/443).
+# Requires Docker Compose 2.24+ for !reset and !override.
+
+x-prod-env: &prod-env
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in infra/.env}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+  # Reaches actual containers only: nothing below publishes a port.
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in infra/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+    ports: !reset []
+
+  kafka:
+    ports: !reset []
+    environment:
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  kafka-ui:
+    profiles: [devtools]
+
+  # Stays as the mail sink until MAIL_HOST points at a real SMTP relay.
+  mailhog:
+    ports: !reset []
+
+  discovery-server:
+    image: ghcr.io/shravanib-debug/alphaledger-discovery-server:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment: *prod-env
+
+  config-server:
+    image: ghcr.io/shravanib-debug/alphaledger-config-server:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment: *prod-env
+
+  api-gateway:
+    image: ghcr.io/shravanib-debug/alphaledger-api-gateway:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment:
+      <<: *prod-env
+      FRONTEND_ORIGINS: https://${DOMAIN:?set DOMAIN in infra/.env}
+
+  auth-service:
+    image: ghcr.io/shravanib-debug/alphaledger-auth-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment:
+      <<: *prod-env
+      SEED_DEMO_USERS: ${SEED_DEMO_USERS:-true}   # the only way to get first logins today
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:?set DEMO_USER_PASSWORD in infra/.env}
+      AUTH_COOKIE_SECURE: "true"
+      AUTH_ALLOWED_ORIGINS: https://${DOMAIN:?set DOMAIN in infra/.env}
+
+  portfolio-service:
+    image: ghcr.io/shravanib-debug/alphaledger-portfolio-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment:
+      <<: *prod-env
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+
+  trade-service:
+    image: ghcr.io/shravanib-debug/alphaledger-trade-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment: *prod-env
+
+  valuation-service:
+    image: ghcr.io/shravanib-debug/alphaledger-valuation-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment: *prod-env
+
+  position-service:
+    image: ghcr.io/shravanib-debug/alphaledger-position-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment: *prod-env
+
+  reconciliation-service:
+    image: ghcr.io/shravanib-debug/alphaledger-reconciliation-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment: *prod-env
+
+  notification-service:
+    image: ghcr.io/shravanib-debug/alphaledger-notification-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment:
+      <<: *prod-env
+      MAIL_HOST: ${MAIL_HOST:-mailhog}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+
+  analytics-service:
+    image: ghcr.io/shravanib-debug/alphaledger-analytics-service:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+    environment: *prod-env
+
+  frontend:
+    image: ghcr.io/shravanib-debug/alphaledger-frontend:${IMAGE_TAG:?set IMAGE_TAG}
+    ports: !reset []
+
+  prometheus:
+    ports: !override
+      - "127.0.0.1:9090:9090"
+
+  # Reach it through an SSH tunnel: ssh -L 3001:localhost:3001 <server>
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in infra/.env}
+    ports: !override
+      - "127.0.0.1:3001:3000"
+
+volumes:
+  kafka-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [discovery-server, config-server, api-gateway, auth-service, portfolio-service, trade-service,
+                position-service, valuation-service, reconciliation-service, notification-service,
+                analytics-service, frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image == 'frontend' && 'frontend' || '.' }}
+          file: ${{ matrix.image == 'frontend' && 'frontend/Dockerfile' || 'infra/docker/service.Dockerfile' }}
+          build-args: MODULE=${{ matrix.image }}
+          push: true
+          tags: ghcr.io/shravanib-debug/alphaledger-${{ matrix.image }}:${{ github.event.workflow_run.head_sha }}
+
+  # Off until a server exists: set the repository variable DEPLOY_ENABLED=true and the DEPLOY_* secrets.
+  deploy:
+    needs: images
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd alphaledger
+            git fetch origin
+            git checkout ${{ github.event.workflow_run.head_sha }}
+            bash infra/deploy.sh ${{ github.event.workflow_run.head_sha }}

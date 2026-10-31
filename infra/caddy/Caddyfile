@@ -1,0 +1,7 @@
+# Public entry point: obtains and renews the HTTPS certificate for DOMAIN, then forwards to the dashboard's nginx,
+# which proxies /api to the gateway.
+{$DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy frontend:80
+}
