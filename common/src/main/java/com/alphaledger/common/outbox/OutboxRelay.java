@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.clients.producer.ProducerRecord;
+import io.micrometer.core.instrument.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -81,6 +82,7 @@ public class OutboxRelay {
             }
             jdbc.update("UPDATE outbox_event SET status = 'SENT', sent_at = ?, attempts = attempts + 1 WHERE id = ?",
                     Timestamp.from(clock.instant()), event.id());
+            Metrics.counter("alphaledger.events.published", "topic", event.topic()).increment();
             sent++;
         }
         return sent;

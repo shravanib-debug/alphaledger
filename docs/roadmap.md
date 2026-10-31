@@ -371,28 +371,28 @@
 **Goal:** Make the project look and behave like a professional team's codebase.
 
 ### CI/CD
-- [ ] Multi-stage Dockerfile for every service
-- [ ] GitHub Actions workflow: build + unit tests on every PR
-- [ ] Integration test stage (Testcontainers)
-- [ ] JaCoCo coverage report with **80% gate**
+- [x] Multi-stage Dockerfile for every service
+- [x] GitHub Actions workflow: build + unit tests on every PR
+- [x] Integration test stage (Testcontainers)
+- [x] JaCoCo coverage report with **80% gate**
 - [ ] SonarCloud integration and quality gate
-- [ ] Checkstyle / SpotBugs
-- [ ] Docker image build and push (tag by commit SHA)
-- [ ] Deploy stage for `main` (compose on a VM or similar)
+- [x] Checkstyle / SpotBugs
+- [x] Docker image build and push (tag by commit SHA)
+- [x] Deploy stage for `main` (compose on a VM; needs a server and the DEPLOY_* settings to run)
 - [ ] Branch protection: require passing CI before merge
-- [ ] PR template and code-review checklist
+- [x] PR template and code-review checklist
 
 ### Observability
-- [ ] Prometheus scraping all services
-- [ ] Grafana dashboards (JVM, HTTP latency, Kafka consumer lag)
-- [ ] Business metrics (trades/day, break rate, DLQ count)
-- [ ] Structured JSON logging with correlation IDs
+- [x] Prometheus scraping all services
+- [x] Grafana dashboards (JVM, HTTP latency, Kafka consumer lag)
+- [x] Business metrics (trades/day, break rate, DLQ count)
+- [x] Structured JSON logging with correlation IDs
 - [ ] Optional: centralized logs (Loki/ELK)
 
 ### Compose polish
-- [ ] Compose profiles (`core`, `recon`, `analytics`, `monitoring`)
-- [ ] Health checks and `depends_on` conditions
-- [ ] `.env.example` for configuration
+- [x] Compose profiles (`core`, `recon`, `analytics`, `monitoring`)
+- [x] Health checks and `depends_on` conditions
+- [x] `.env.example` for configuration
 
 **DoD:** A PR triggers a green pipeline with coverage and Sonar results; Grafana shows live metrics.
 

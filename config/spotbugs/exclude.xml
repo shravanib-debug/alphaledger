@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Seeded per instrument and minute on purpose: the same inputs give the same synthetic tick. -->
+    <Match>
+        <Class name="com.alphaledger.valuation.marketdata.SyntheticPriceSource"/>
+        <Bug pattern="DMI_RANDOM_USED_ONLY_ONCE"/>
+    </Match>
+</FindBugsFilter>

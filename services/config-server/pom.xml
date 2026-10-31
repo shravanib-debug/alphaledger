@@ -15,6 +15,11 @@
     <name>AlphaLedger :: config-server</name>
     <description>Spring Cloud Config Server (native file backend)</description>
 
+    <properties>
+        <!-- Only a main class; nothing to cover. -->
+        <coverage.line.minimum>0.20</coverage.line.minimum>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.cloud</groupId>

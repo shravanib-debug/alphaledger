@@ -41,7 +41,7 @@ public class SecurityConfig {
 
     static final String[] PUBLIC_PATHS = {
             "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout",
-            "/actuator/health", "/actuator/health/**", "/actuator/info",
+            "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
             "/api/v1/ping/**"
     };
 

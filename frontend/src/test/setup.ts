@@ -3,7 +3,7 @@ import { cleanup, configure } from '@testing-library/react'
 
 import { server } from './server'
 
-configure({ asyncUtilTimeout: 8000 })
+configure({ asyncUtilTimeout: 20_000 }) // a cold run imports lazy pages slowly
 
 // Browser APIs jsdom lacks, used by Radix (pointer capture, scrolling) and Recharts (ResizeObserver).
 class ResizeObserverStub {

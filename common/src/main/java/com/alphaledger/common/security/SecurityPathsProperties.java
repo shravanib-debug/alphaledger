@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record SecurityPathsProperties(List<String> additionalPublicPaths) {
 
     public static final List<String> DEFAULT_PUBLIC_PATHS = List.of(
-            "/actuator/health", "/actuator/health/**", "/actuator/info",
+            "/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
             "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**",
             "/error");
 

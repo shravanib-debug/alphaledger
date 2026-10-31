@@ -1,0 +1,48 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: discovery-server
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['discovery-server:8080']
+  - job_name: config-server
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['config-server:8080']
+  - job_name: api-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['api-gateway:8080']
+  - job_name: auth-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['auth-service:8080']
+  - job_name: portfolio-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['portfolio-service:8080']
+  - job_name: trade-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['trade-service:8080']
+  - job_name: position-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['position-service:8080']
+  - job_name: valuation-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['valuation-service:8080']
+  - job_name: reconciliation-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['reconciliation-service:8080']
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['notification-service:8080']
+  - job_name: analytics-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['analytics-service:8080']

@@ -10,7 +10,7 @@ match the custodian's.**
 
 ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Spring Boot 4.0](https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen)
 ![Spring Cloud 2025.1](https://img.shields.io/badge/Spring%20Cloud-2025.1-brightgreen) ![Kafka](https://img.shields.io/badge/Kafka-4.2-black)
-![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-312%20passing-success)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-336791) ![Tests](https://img.shields.io/badge/tests-318%20passing-success)
 
 ---
 
@@ -359,7 +359,7 @@ In Swagger, log in with `POST /api/v1/auth/login`, then paste the `accessToken` 
 | Component (frontend) | Key UI flows, including token refresh, against a mocked API | Vitest, React Testing Library, MSW |
 | Smoke | 62 checks against the running Docker stack through the gateway and dashboard: health, registration, login per role, 401/403 cases, trade capture, Kafka event, prices, holidays, trade → position → valuation, custodian upload and recon roles | `scripts/smoke-test.sh` |
 
-Currently **312 automated tests**, all passing: 278 backend (`./mvnw verify`; integration tests need Docker running) and 34 frontend (`npm test` in `frontend/`).
+Currently **318 automated tests**, all passing: 284 backend (`./mvnw verify`; integration tests need Docker running) and 34 frontend (`npm test` in `frontend/`).
 
 ---
 
@@ -406,6 +406,7 @@ Recorded as ADRs in [docs/architecture.md](docs/architecture.md) §13. Highlight
 | [Product requirements](docs/prd.md) | Goals, personas, functional requirements, business rules, demo data plan |
 | [Architecture](docs/architecture.md) | Services, events, data pipelines, data model, APIs, security, ADRs |
 | [Roadmap](docs/roadmap.md) | Phase checklists, definitions of done, progress log |
+| [Deployment](docs/deployment.md) | Production server setup, automatic deploys, rollback, backups, limits |
 | [Browser sessions](docs/auth-session.md) | Refresh-token cookie, CSRF checks, rotation, reuse and replay rules, frontend contract |
 | [UI plan](docs/ui-plan.md) | Phase 8 design system, screens against the API, milestones |
 | [Manual testing](docs/manual-testing.md) | Step-by-step UI walkthrough, screenshots, presenter notes |

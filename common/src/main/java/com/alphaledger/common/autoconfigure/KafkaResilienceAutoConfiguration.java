@@ -1,5 +1,6 @@
 package com.alphaledger.common.autoconfigure;
 
+import io.micrometer.core.instrument.Metrics;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
@@ -53,6 +54,7 @@ public class KafkaResilienceAutoConfiguration {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafka, (record, ex) -> {
             log.error("Dead-lettering {}-{}@{} after failure: {}", record.topic(), record.partition(), record.offset(),
                     ex.getMessage());
+            Metrics.counter("alphaledger.dead.letters", "topic", record.topic()).increment();
             return new TopicPartition(DeadLetterTopics.of(record.topic()), -1);
         });
         ExponentialBackOffWithMaxRetries backOff = new ExponentialBackOffWithMaxRetries(retry.maxRetries());

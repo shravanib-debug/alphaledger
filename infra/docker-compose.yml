@@ -1,6 +1,6 @@
 # AlphaLedger local stack: infrastructure, platform services, auth-, portfolio-, trade-, position- and valuation-service.
 # Run from the repo root:  docker compose -f infra/docker-compose.yml up -d --build
-# Business services are added here as their phases land; Compose profiles arrive in Phase 9.
+# Plain `up` starts the core; profiles add recon, analytics and monitoring. Everything: --profile "*"
 
 name: alphaledger
 
@@ -14,6 +14,7 @@ x-java-service: &java-service
     EUREKA_URL: http://discovery-server:8080/eureka
     CONFIG_SERVER_URL: http://config-server:8080
     JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=60
+    LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs   # JSON logs; correlationId comes from the MDC
     # Local-development signing key only. Override in infra/.env for anything shared (see infra/.env.example).
     JWT_SECRET: ${JWT_SECRET:-rI0r1utFpB/WAXCpUz7oTxyCYdJu5Y++uXHT0UwueEbDiXLZIke/+rDAKgn6U8bq}
   healthcheck: &java-health
@@ -270,6 +271,7 @@ services:
 
   reconciliation-service:
     <<: *java-service
+    profiles: [recon]
     build:
       context: ..
       dockerfile: infra/docker/service.Dockerfile
@@ -327,6 +329,7 @@ services:
   # Nightly ETL (02:00 IST) from the services' databases into analytics_db; read-only connections (ADR 23).
   analytics-service:
     <<: *java-service
+    profiles: [analytics]
     build:
       context: ..
       dockerfile: infra/docker/service.Dockerfile
@@ -359,6 +362,31 @@ services:
     depends_on:
       api-gateway:
         condition: service_healthy
+
+  # ---------- Monitoring ----------
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
 
 volumes:
   postgres-data:

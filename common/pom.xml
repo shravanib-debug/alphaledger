@@ -15,6 +15,11 @@
     <name>AlphaLedger :: common</name>
     <description>Shared library: event envelope, error model, correlation IDs</description>
 
+    <properties>
+        <!-- Most of this library runs inside the services, whose tests are not counted here. -->
+        <coverage.line.minimum>0.20</coverage.line.minimum>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
